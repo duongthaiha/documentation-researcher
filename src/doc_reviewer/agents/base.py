@@ -58,8 +58,18 @@ def create_customer_agent(
             name="Manufacturing Customer Agent",
             instructions=MANUFACTURING_INSTRUCTIONS,
         )
+    elif industry == "engineering":
+        from doc_reviewer.agents.engineering_customer import ENGINEERING_INSTRUCTIONS
+
+        return Agent(
+            _create_chat_client(settings, credential),
+            name="Engineering Customer Agent",
+            instructions=ENGINEERING_INSTRUCTIONS,
+        )
     else:
-        raise ValueError(f"Unknown industry: {industry}. Supported: fsi, manufacturing")
+        raise ValueError(
+            f"Unknown industry: {industry}. Supported: fsi, manufacturing, engineering"
+        )
 
 
 def create_writer_agent(

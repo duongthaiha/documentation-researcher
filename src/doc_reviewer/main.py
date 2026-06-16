@@ -9,7 +9,7 @@ from doc_reviewer.config import Settings
 from doc_reviewer.document.loader import load_document
 from doc_reviewer.orchestrator import run_review
 
-SUPPORTED_INDUSTRIES = ["fsi", "manufacturing"]
+SUPPORTED_INDUSTRIES = ["fsi", "manufacturing", "engineering"]
 
 
 def parse_args() -> argparse.Namespace:

@@ -20,6 +20,7 @@ The system operates in two phases:
 - **Industries implemented**:
   - **FSI (Financial Services)**: Focus on security, regulatory compliance (PCI-DSS, SOX, GDPR), network isolation, data sovereignty, encryption, zero-trust, HA (99.99%+)
   - **Manufacturing**: Focus on edge computing, IoT, OT/IT convergence, low-latency, factory floor connectivity, SCADA/ICS security, hybrid cloud, intermittent connectivity
+  - **Engineering**: Focus on building agents in Foundry with DevOps practices, CI/CD, prompt/tool versioning, eval gates, observability, rollback, and secure release automation
 
 ### Research Agent
 - **Role**: Technical researcher
@@ -42,11 +43,11 @@ The system operates in two phases:
 
 1. Create `src/doc_reviewer/agents/<industry>_customer.py`
 2. Define the agent's system prompt with industry-specific focus areas
-3. Add the industry to the `INDUSTRIES` dict in `agents/__init__.py`
+3. Add the industry to `SUPPORTED_INDUSTRIES` in `main.py` and `create_customer_agent()` in `agents/base.py`
 4. The orchestrator will automatically pick it up when `--industry <name>` is used
 
 ## Running
 
 ```bash
-doc-reviewer --file path/to/document.md --rounds 3 --industry fsi manufacturing
+doc-reviewer --file path/to/document.md --rounds 3 --industry fsi manufacturing engineering
 ```

@@ -18,6 +18,7 @@ Document → Customer Agents ask questions → Research Agent answers → Writer
 |-------|------|-------|
 | FSI Customer | CTO at a financial services company. Asks about security, compliance, network isolation. | None (LLM) |
 | Manufacturing Customer | CTO at a manufacturer. Asks about edge, IoT, OT/IT convergence. | None (LLM) |
+| Engineering Customer | Engineering lead/platform architect building agents in Foundry. Asks about DevOps, CI/CD, eval gates, versioning, rollback, and observability. | None (LLM) |
 | Research Agent | Answers customer questions with researched best practices. | Local Markdown research docs, Microsoft Learn MCP, WorkIQ MCP |
 | Writer Agent | Updates the document with new guidance from the review. | None (LLM) |
 
@@ -62,7 +63,10 @@ doc-reviewer --file docs/architecture.md
 doc-reviewer --file docs/architecture.md --industry fsi
 
 # Custom number of Q&A rounds
-doc-reviewer --file docs/architecture.md --rounds 5 --industry fsi manufacturing
+doc-reviewer --file docs/architecture.md --rounds 5 --industry fsi manufacturing engineering
+
+# Review from an engineering/devops perspective
+doc-reviewer --file docs/architecture.md --industry engineering
 
 # Use a custom local research directory
 doc-reviewer --file docs/architecture.md --research-dir ./research
@@ -95,6 +99,7 @@ Place Markdown research documentation in the repository-level `research/` folder
     │   ├── research.py      # Research agent
     │   ├── fsi_customer.py  # FSI customer persona
     │   ├── manufacturing_customer.py  # Manufacturing customer persona
+    │   ├── engineering_customer.py  # Engineering/DevOps customer persona
     │   └── writer.py        # Document writer agent
     └── document/
         └── loader.py        # Markdown/PDF loader

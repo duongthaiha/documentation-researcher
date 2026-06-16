@@ -1,0 +1,23 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Doc Reviewer: FSI",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "doc_reviewer.main",
+      "cwd": "${workspaceFolder}",
+      "env": {
+        "PYTHONPATH": "${workspaceFolder}/src"
+      },
+      "args": [
+        "--file",
+        "document/Microsoft Foundry adoption across my organization.md",
+        "--industry",
+        "engineering"
+      ],
+      "console": "integratedTerminal",
+      "justMyCode": false
+    }
+  ]
+}
