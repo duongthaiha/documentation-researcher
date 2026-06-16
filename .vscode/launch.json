@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Doc Reviewer: FSI",
+      "name": "Doc Reviewer: Engineering",
       "type": "debugpy",
       "request": "launch",
       "module": "doc_reviewer.main",
@@ -14,7 +14,10 @@
         "--file",
         "document/Microsoft Foundry adoption across my organization.md",
         "--industry",
-        "engineering"
+        "engineering",
+        "--rounds",
+        "1"
+
       ],
       "console": "integratedTerminal",
       "justMyCode": false

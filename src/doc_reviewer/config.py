@@ -9,6 +9,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _get_bool_env(name: str, default: bool = False) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _default_research_dir() -> Path:
     return Path(__file__).resolve().parents[2] / "research"
 
@@ -23,6 +30,12 @@ class Settings:
     research_dir: Path = field(default_factory=_default_research_dir)
     review_rounds: int = 3
     ms_learn_mcp_url: str = "https://learn.microsoft.com/api/mcp"
+    langfuse_enabled: bool = False
+    langfuse_public_key: str = ""
+    langfuse_secret_key: str = ""
+    langfuse_base_url: str = "http://localhost:3000"
+    langfuse_enable_sensitive_data: bool = False
+    langfuse_debug: bool = False
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -39,6 +52,14 @@ class Settings:
                 str(_default_research_dir()),
             )
         ).expanduser()
+        langfuse_enabled = _get_bool_env("LANGFUSE_ENABLED", False)
+        langfuse_public_key = os.environ.get("LANGFUSE_PUBLIC_KEY", "")
+        langfuse_secret_key = os.environ.get("LANGFUSE_SECRET_KEY", "")
+        langfuse_base_url = os.environ.get("LANGFUSE_BASE_URL", "http://localhost:3000")
+        langfuse_enable_sensitive_data = _get_bool_env(
+            "LANGFUSE_ENABLE_SENSITIVE_DATA", False
+        )
+        langfuse_debug = _get_bool_env("LANGFUSE_DEBUG", False)
 
         if not project_endpoint:
             raise ValueError(
@@ -50,6 +71,11 @@ class Settings:
                 "WORKIQ_MCP_URL environment variable is required. "
                 "See .env.example for configuration."
             )
+        if langfuse_enabled and (not langfuse_public_key or not langfuse_secret_key):
+            raise ValueError(
+                "LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY are required when "
+                "LANGFUSE_ENABLED=true."
+            )
 
         return cls(
             project_endpoint=project_endpoint,
@@ -57,4 +83,10 @@ class Settings:
             workiq_mcp_url=workiq_mcp_url,
             research_dir=research_dir,
             review_rounds=review_rounds,
+            langfuse_enabled=langfuse_enabled,
+            langfuse_public_key=langfuse_public_key,
+            langfuse_secret_key=langfuse_secret_key,
+            langfuse_base_url=langfuse_base_url,
+            langfuse_enable_sensitive_data=langfuse_enable_sensitive_data,
+            langfuse_debug=langfuse_debug,
         )

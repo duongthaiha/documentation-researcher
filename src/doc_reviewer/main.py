@@ -7,6 +7,7 @@ from pathlib import Path
 
 from doc_reviewer.config import Settings
 from doc_reviewer.document.loader import load_document
+from doc_reviewer.observability import configure_observability, flush_observability
 from doc_reviewer.orchestrator import run_review
 
 SUPPORTED_INDUSTRIES = ["fsi", "manufacturing", "engineering"]
@@ -61,6 +62,12 @@ async def async_main() -> None:
         print(f"❌ Configuration error: {e}", file=sys.stderr)
         sys.exit(1)
 
+    try:
+        configure_observability(settings)
+    except RuntimeError as e:
+        print(f"❌ Observability error: {e}", file=sys.stderr)
+        sys.exit(1)
+
     # Override rounds if specified
     if args.rounds:
         settings.review_rounds = args.rounds
@@ -79,20 +86,23 @@ async def async_main() -> None:
     print(f"🔄 Rounds: {settings.review_rounds}")
     print(f"🔎 Research directory: {settings.research_dir}")
 
-    # Run review
-    conversation, updated_document = await run_review(
-        settings=settings,
-        document_content=document_content,
-        industries=args.industry,
-        rounds=settings.review_rounds,
-        research_dir=settings.research_dir,
-    )
+    try:
+        # Run review
+        conversation, updated_document = await run_review(
+            settings=settings,
+            document_content=document_content,
+            industries=args.industry,
+            rounds=settings.review_rounds,
+            research_dir=settings.research_dir,
+        )
 
-    # Save updated document
-    output_path = _get_output_path(args.file)
-    output_path.write_text(updated_document, encoding="utf-8")
-    print(f"\n📄 Updated document saved to: {output_path}")
-    print(f"💬 Total conversation turns: {len(conversation)}")
+        # Save updated document
+        output_path = _get_output_path(args.file)
+        output_path.write_text(updated_document, encoding="utf-8")
+        print(f"\n📄 Updated document saved to: {output_path}")
+        print(f"💬 Total conversation turns: {len(conversation)}")
+    finally:
+        flush_observability(settings)
 
 
 def main() -> None:

@@ -52,6 +52,28 @@ Required variables:
 
 Optional variables:
 - `RESEARCH_DIR` — Directory containing local Markdown research docs (default: `research/` at the repository root)
+- `LANGFUSE_ENABLED` — Set to `true` to enable Langfuse observability
+- `LANGFUSE_BASE_URL` — Langfuse host URL (default for local Docker: `http://localhost:3000`)
+- `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` — Langfuse project keys
+- `LANGFUSE_ENABLE_SENSITIVE_DATA` — Set to `true` to capture prompts, responses, tool arguments, and tool results
+
+## Langfuse Observability
+
+The app can trace Microsoft Agent Framework runs to Langfuse using OpenTelemetry. Observability is disabled by default.
+
+For a local Langfuse Docker instance running on your host machine, set:
+
+```bash
+LANGFUSE_ENABLED=true
+LANGFUSE_BASE_URL=http://host.docker.internal:3000
+LANGFUSE_PUBLIC_KEY=pk-lf-...
+LANGFUSE_SECRET_KEY=sk-lf-...
+LANGFUSE_ENABLE_SENSITIVE_DATA=false
+```
+
+The devcontainer maps `host.docker.internal` to the host gateway so code inside the container can reach host-running services. Rebuild/reopen the devcontainer after changing `.devcontainer/devcontainer.json`.
+
+Keep `LANGFUSE_ENABLE_SENSITIVE_DATA=false` unless you explicitly want prompts, responses, tool arguments, and tool results in traces. Reviewed architecture documents may contain sensitive customer content.
 
 ## Usage
 
