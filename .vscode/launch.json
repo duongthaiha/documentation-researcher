@@ -8,7 +8,13 @@
       "module": "doc_reviewer.main",
       "cwd": "${workspaceFolder}",
       "env": {
-        "PYTHONPATH": "${workspaceFolder}/src"
+        "PYTHONPATH": "${workspaceFolder}/src",
+        "LANGFUSE_ENABLED": "true",
+        "LANGFUSE_BASE_URL": "http://172.17.0.1:3000",
+        "LANGFUSE_PUBLIC_KEY": "${env:LANGFUSE_PUBLIC_KEY}",
+        "LANGFUSE_SECRET_KEY": "${env:LANGFUSE_SECRET_KEY}",
+        "LANGFUSE_ENABLE_SENSITIVE_DATA": "false",
+        "LANGFUSE_DEBUG": "false"
       },
       "args": [
         "--file",
