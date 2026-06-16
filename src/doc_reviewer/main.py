@@ -37,6 +37,10 @@ def parse_args() -> argparse.Namespace:
         default=SUPPORTED_INDUSTRIES,
         help="Industries to include (default: all)",
     )
+    parser.add_argument(
+        "--research-dir",
+        help="Directory of local Markdown research docs (default: ./research or RESEARCH_DIR)",
+    )
     return parser.parse_args()
 
 
@@ -60,6 +64,8 @@ async def async_main() -> None:
     # Override rounds if specified
     if args.rounds:
         settings.review_rounds = args.rounds
+    if args.research_dir:
+        settings.research_dir = Path(args.research_dir).expanduser()
 
     # Load document
     try:
@@ -71,6 +77,7 @@ async def async_main() -> None:
     print(f"📄 Loaded document: {args.file}")
     print(f"🏭 Industries: {', '.join(args.industry)}")
     print(f"🔄 Rounds: {settings.review_rounds}")
+    print(f"🔎 Research directory: {settings.research_dir}")
 
     # Run review
     conversation, updated_document = await run_review(
@@ -78,6 +85,7 @@ async def async_main() -> None:
         document_content=document_content,
         industries=args.industry,
         rounds=settings.review_rounds,
+        research_dir=settings.research_dir,
     )
 
     # Save updated document

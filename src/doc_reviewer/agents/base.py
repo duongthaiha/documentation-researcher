@@ -1,33 +1,50 @@
-"""Base agent factory for creating agents via FoundryAgent."""
+"""Base agent factory for creating chat-backed agents."""
 
-from agent_framework import MCPStreamableHTTPTool
-from agent_framework.foundry import FoundryAgent
+from agent_framework import Agent, MCPStreamableHTTPTool
+from agent_framework.foundry import FoundryChatClient
+from azure.core.credentials_async import AsyncTokenCredential
 
 from doc_reviewer.config import Settings
 
 
-def create_research_agent(
+def _create_chat_client(
     settings: Settings,
-    workiq_mcp: MCPStreamableHTTPTool,
-) -> FoundryAgent:
-    """Create the Research agent with MCP tools."""
-    from doc_reviewer.agents.research import RESEARCH_INSTRUCTIONS
-
-    return FoundryAgent(
+    credential: AsyncTokenCredential,
+) -> FoundryChatClient:
+    return FoundryChatClient(
         project_endpoint=settings.project_endpoint,
-        name="Research Agent",
-        instructions=RESEARCH_INSTRUCTIONS,
-        tools=[workiq_mcp],
+        model=settings.model_deployment_name,
+        credential=credential,
     )
 
 
-def create_customer_agent(settings: Settings, industry: str) -> FoundryAgent:
+def create_research_agent(
+    settings: Settings,
+    credential: AsyncTokenCredential,
+    mcp_tools: list[MCPStreamableHTTPTool],
+) -> Agent:
+    """Create the Research agent with MCP tools."""
+    from doc_reviewer.agents.research import RESEARCH_INSTRUCTIONS
+
+    return Agent(
+        _create_chat_client(settings, credential),
+        name="Research Agent",
+        instructions=RESEARCH_INSTRUCTIONS,
+        tools=mcp_tools,
+    )
+
+
+def create_customer_agent(
+    settings: Settings,
+    credential: AsyncTokenCredential,
+    industry: str,
+) -> Agent:
     """Create a customer agent for the given industry."""
     if industry == "fsi":
         from doc_reviewer.agents.fsi_customer import FSI_INSTRUCTIONS
 
-        return FoundryAgent(
-            project_endpoint=settings.project_endpoint,
+        return Agent(
+            _create_chat_client(settings, credential),
             name="FSI Customer Agent",
             instructions=FSI_INSTRUCTIONS,
         )
@@ -36,8 +53,8 @@ def create_customer_agent(settings: Settings, industry: str) -> FoundryAgent:
             MANUFACTURING_INSTRUCTIONS,
         )
 
-        return FoundryAgent(
-            project_endpoint=settings.project_endpoint,
+        return Agent(
+            _create_chat_client(settings, credential),
             name="Manufacturing Customer Agent",
             instructions=MANUFACTURING_INSTRUCTIONS,
         )
@@ -45,12 +62,15 @@ def create_customer_agent(settings: Settings, industry: str) -> FoundryAgent:
         raise ValueError(f"Unknown industry: {industry}. Supported: fsi, manufacturing")
 
 
-def create_writer_agent(settings: Settings) -> FoundryAgent:
+def create_writer_agent(
+    settings: Settings,
+    credential: AsyncTokenCredential,
+) -> Agent:
     """Create the Writer agent."""
     from doc_reviewer.agents.writer import WRITER_INSTRUCTIONS
 
-    return FoundryAgent(
-        project_endpoint=settings.project_endpoint,
+    return Agent(
+        _create_chat_client(settings, credential),
         name="Writer Agent",
         instructions=WRITER_INSTRUCTIONS,
     )

@@ -1,6 +1,7 @@
 """Conversation orchestrator for multi-agent document review."""
 
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from agent_framework import MCPStreamableHTTPTool
 from azure.identity.aio import DefaultAzureCredential
@@ -11,6 +12,10 @@ from doc_reviewer.agents.base import (
     create_writer_agent,
 )
 from doc_reviewer.config import Settings
+from doc_reviewer.research_corpus import (
+    find_relevant_research,
+    format_research_context,
+)
 
 
 @dataclass
@@ -28,6 +33,7 @@ class ReviewSession:
     document_content: str
     industries: list[str]
     rounds: int
+    research_dir: Path
     conversation: list[ConversationMessage] = field(default_factory=list)
 
 
@@ -48,6 +54,7 @@ async def run_review(
     document_content: str,
     industries: list[str],
     rounds: int,
+    research_dir: Path,
 ) -> tuple[list[ConversationMessage], str]:
     """Run a full document review session.
 
@@ -58,23 +65,34 @@ async def run_review(
         document_content=document_content,
         industries=industries,
         rounds=rounds,
+        research_dir=research_dir,
     )
 
     async with (
         DefaultAzureCredential() as credential,
         MCPStreamableHTTPTool(
+            name="Microsoft Learn MCP",
+            url=settings.ms_learn_mcp_url,
+            tool_name_prefix="mslearn",
+        ) as ms_learn_mcp,
+        MCPStreamableHTTPTool(
             name="WorkIQ MCP",
             url=settings.workiq_mcp_url,
+            tool_name_prefix="workiq",
         ) as workiq_mcp,
     ):
         # Create agents
-        research_agent = create_research_agent(settings, workiq_mcp)
+        research_agent = create_research_agent(
+            settings,
+            credential,
+            [ms_learn_mcp, workiq_mcp],
+        )
         customer_agents = []
         for industry in industries:
-            agent = create_customer_agent(settings, industry)
+            agent = create_customer_agent(settings, credential, industry)
             customer_agents.append((industry, agent))
 
-        writer_agent = create_writer_agent(settings)
+        writer_agent = create_writer_agent(settings, credential)
 
         # Phase 1: Customer Q&A rounds
         print("\n" + "=" * 60)
@@ -167,13 +185,23 @@ def _build_research_prompt(session: ReviewSession) -> str:
     # Get the last customer question
     last_question = session.conversation[-1]
     history = _format_conversation_history(session.conversation[:-1])
+    local_research_context = format_research_context(
+        find_relevant_research(session.research_dir, last_question.content)
+    )
+    local_research_section = (
+        f"\n\n{local_research_context}\n\n"
+        if local_research_context
+        else "\n\n"
+    )
 
     return (
         f"A customer ({last_question.agent_name}) has asked the following questions "
-        f"about this architecture document. Research the answers using your tools "
-        f"and provide specific, actionable guidance.\n\n"
+        f"about this architecture document. Research the answers using the local "
+        f"research context when provided and your tools, then provide specific, "
+        f"actionable guidance.\n\n"
         f"## Original Document\n\n{session.document_content}\n\n"
         f"{history}\n\n"
+        f"{local_research_section}"
         f"## Latest Question from {last_question.agent_name}\n\n"
         f"{last_question.content}"
     )

@@ -1,11 +1,16 @@
 """Configuration for the documentation reviewer."""
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 
 from dotenv import load_dotenv
 
 load_dotenv()
+
+
+def _default_research_dir() -> Path:
+    return Path(__file__).resolve().parents[2] / "research"
 
 
 @dataclass
@@ -15,6 +20,7 @@ class Settings:
     project_endpoint: str
     model_deployment_name: str
     workiq_mcp_url: str
+    research_dir: Path = field(default_factory=_default_research_dir)
     review_rounds: int = 3
     ms_learn_mcp_url: str = "https://learn.microsoft.com/api/mcp"
 
@@ -27,6 +33,12 @@ class Settings:
         )
         workiq_mcp_url = os.environ.get("WORKIQ_MCP_URL", "")
         review_rounds = int(os.environ.get("REVIEW_ROUNDS", "3"))
+        research_dir = Path(
+            os.environ.get(
+                "RESEARCH_DIR",
+                str(_default_research_dir()),
+            )
+        ).expanduser()
 
         if not project_endpoint:
             raise ValueError(
@@ -43,5 +55,6 @@ class Settings:
             project_endpoint=project_endpoint,
             model_deployment_name=model_deployment_name,
             workiq_mcp_url=workiq_mcp_url,
+            research_dir=research_dir,
             review_rounds=review_rounds,
         )

@@ -8,7 +8,7 @@ A multi-agent system that reviews architecture and guidance documentation from i
 Document → Customer Agents ask questions → Research Agent answers → Writer Agent updates doc
 ```
 
-**Phase 1 — Customer Q&A:** Industry-specific customer agents (acting as IT Architects/CTOs) read your document and ask pointed questions about gaps and missing best practices. A Research Agent answers using Microsoft Learn and WorkIQ MCP tools.
+**Phase 1 — Customer Q&A:** Industry-specific customer agents (acting as IT Architects/CTOs) read your document and ask pointed questions about gaps and missing best practices. A Research Agent answers using local Markdown research docs plus Microsoft Learn and WorkIQ MCP tools.
 
 **Phase 2 — Document Update:** A Writer Agent takes the original document plus the full conversation and produces an updated version with the new guidance incorporated.
 
@@ -18,7 +18,7 @@ Document → Customer Agents ask questions → Research Agent answers → Writer
 |-------|------|-------|
 | FSI Customer | CTO at a financial services company. Asks about security, compliance, network isolation. | None (LLM) |
 | Manufacturing Customer | CTO at a manufacturer. Asks about edge, IoT, OT/IT convergence. | None (LLM) |
-| Research Agent | Answers customer questions with researched best practices. | Microsoft Learn MCP, WorkIQ MCP |
+| Research Agent | Answers customer questions with researched best practices. | Local Markdown research docs, Microsoft Learn MCP, WorkIQ MCP |
 | Writer Agent | Updates the document with new guidance from the review. | None (LLM) |
 
 ## Setup
@@ -49,6 +49,9 @@ Required variables:
 - `AZURE_AI_MODEL_DEPLOYMENT_NAME` — Model deployment name (default: `gpt-4o`)
 - `WORKIQ_MCP_URL` — URL of your WorkIQ MCP server
 
+Optional variables:
+- `RESEARCH_DIR` — Directory containing local Markdown research docs (default: `research/` at the repository root)
+
 ## Usage
 
 ```bash
@@ -60,9 +63,16 @@ doc-reviewer --file docs/architecture.md --industry fsi
 
 # Custom number of Q&A rounds
 doc-reviewer --file docs/architecture.md --rounds 5 --industry fsi manufacturing
+
+# Use a custom local research directory
+doc-reviewer --file docs/architecture.md --research-dir ./research
 ```
 
 The updated document is saved as `<original_name>_reviewed.<ext>` in the same directory.
+
+## Local Research Docs
+
+Place Markdown research documentation in the repository-level `research/` folder. The Research Agent searches `*.md` files recursively, injects the most relevant snippets into its prompt, and cites the local Markdown path when it uses those findings. If the folder is missing or empty, the review continues using MCP tools only.
 
 ## Adding a New Industry
 
@@ -73,18 +83,21 @@ The updated document is saved as `<original_name>_reviewed.<ext>` in the same di
 ## Project Structure
 
 ```
-src/doc_reviewer/
-├── main.py              # CLI entry point
-├── config.py            # Environment configuration
-├── orchestrator.py      # Two-phase conversation orchestrator
-├── agents/
-│   ├── base.py          # Agent factory
-│   ├── research.py      # Research agent (MCP tools)
-│   ├── fsi_customer.py  # FSI customer persona
-│   ├── manufacturing_customer.py  # Manufacturing customer persona
-│   └── writer.py        # Document writer agent
-└── document/
-    └── loader.py        # Markdown/PDF loader
+.
+├── research/            # Optional local Markdown research corpus
+└── src/doc_reviewer/
+    ├── main.py              # CLI entry point
+    ├── config.py            # Environment configuration
+    ├── orchestrator.py      # Two-phase conversation orchestrator
+    ├── research_corpus.py   # Local Markdown research retrieval
+    ├── agents/
+    │   ├── base.py          # Agent factory
+    │   ├── research.py      # Research agent
+    │   ├── fsi_customer.py  # FSI customer persona
+    │   ├── manufacturing_customer.py  # Manufacturing customer persona
+    │   └── writer.py        # Document writer agent
+    └── document/
+        └── loader.py        # Markdown/PDF loader
 ```
 
 ## License
