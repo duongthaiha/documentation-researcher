@@ -1,11 +1,14 @@
 """Conversation orchestrator for multi-agent document review."""
 
+import uuid
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
 from agent_framework import MCPStreamableHTTPTool
 from azure.identity.aio import DefaultAzureCredential
 from httpx import AsyncClient, Timeout
+from langfuse import propagate_attributes
 
 from doc_reviewer.agents.base import (
     create_customer_agent,
@@ -95,80 +98,89 @@ async def run_review(
             http_client=github_http_client,
         ) as github_mcp,
     ):
-        # Create agents
-        research_agent = create_research_agent(
-            settings,
-            credential,
-            [ms_learn_mcp, workiq_mcp, github_mcp],
-        )
-        customer_agents = []
-        for industry in industries:
-            agent = create_customer_agent(settings, credential, industry)
-            customer_agents.append((industry, agent))
+        # Group all traces under one Langfuse session
+        session_id = f"doc-review-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
+        industry_label = "+".join(industries)
 
-        writer_agent = create_writer_agent(settings, credential)
+        with propagate_attributes(
+            session_id=session_id,
+            tags=["doc-reviewer", *industries],
+            metadata={"industries": industry_label, "rounds": str(rounds)},
+        ):
+            # Create agents
+            research_agent = create_research_agent(
+                settings,
+                credential,
+                [ms_learn_mcp, workiq_mcp, github_mcp],
+            )
+            customer_agents = []
+            for industry in industries:
+                agent = create_customer_agent(settings, credential, industry)
+                customer_agents.append((industry, agent))
 
-        # Phase 1: Customer Q&A rounds
-        print("\n" + "=" * 60)
-        print("📋 PHASE 1: Customer Review & Research")
-        print("=" * 60)
+            writer_agent = create_writer_agent(settings, credential)
 
-        for round_num in range(1, rounds + 1):
-            print(f"\n--- Round {round_num}/{rounds} ---\n")
+            # Phase 1: Customer Q&A rounds
+            print("\n" + "=" * 60)
+            print("📋 PHASE 1: Customer Review & Research")
+            print("=" * 60)
 
-            # Each customer agent asks questions
-            for industry, customer_agent in customer_agents:
-                customer_prompt = _build_customer_prompt(session, round_num)
+            for round_num in range(1, rounds + 1):
+                print(f"\n--- Round {round_num}/{rounds} ---\n")
 
-                print(f"🏢 [{industry.upper()} Customer]: ", end="", flush=True)
-                response_text = ""
-                async for chunk in customer_agent.run(
-                    customer_prompt, stream=True
-                ):
-                    if chunk.text:
-                        print(chunk.text, end="", flush=True)
-                        response_text += chunk.text
-                print("\n")
+                # Each customer agent asks questions
+                for industry, customer_agent in customer_agents:
+                    customer_prompt = _build_customer_prompt(session, round_num)
 
-                session.conversation.append(
-                    ConversationMessage(
-                        agent_name=f"{industry.upper()} Customer",
-                        content=response_text,
+                    print(f"🏢 [{industry.upper()} Customer]: ", end="", flush=True)
+                    response_text = ""
+                    async for chunk in customer_agent.run(
+                        customer_prompt, stream=True
+                    ):
+                        if chunk.text:
+                            print(chunk.text, end="", flush=True)
+                            response_text += chunk.text
+                    print("\n")
+
+                    session.conversation.append(
+                        ConversationMessage(
+                            agent_name=f"{industry.upper()} Customer",
+                            content=response_text,
+                        )
                     )
-                )
 
-                # Research agent answers
-                research_prompt = _build_research_prompt(session)
+                    # Research agent answers
+                    research_prompt = _build_research_prompt(session)
 
-                print("🔬 [Research Agent]: ", end="", flush=True)
-                response_text = ""
-                async for chunk in research_agent.run(
-                    research_prompt, stream=True
-                ):
-                    if chunk.text:
-                        print(chunk.text, end="", flush=True)
-                        response_text += chunk.text
-                print("\n")
+                    print("🔬 [Research Agent]: ", end="", flush=True)
+                    response_text = ""
+                    async for chunk in research_agent.run(
+                        research_prompt, stream=True
+                    ):
+                        if chunk.text:
+                            print(chunk.text, end="", flush=True)
+                            response_text += chunk.text
+                    print("\n")
 
-                session.conversation.append(
-                    ConversationMessage(
-                        agent_name="Research Agent",
-                        content=response_text,
+                    session.conversation.append(
+                        ConversationMessage(
+                            agent_name="Research Agent",
+                            content=response_text,
+                        )
                     )
-                )
 
-        # Phase 2: Writer updates the document
-        print("\n" + "=" * 60)
-        print("✍️  PHASE 2: Document Update")
-        print("=" * 60 + "\n")
+            # Phase 2: Writer updates the document
+            print("\n" + "=" * 60)
+            print("✍️  PHASE 2: Document Update")
+            print("=" * 60 + "\n")
 
-        writer_prompt = _build_writer_prompt(session)
+            writer_prompt = _build_writer_prompt(session)
 
-        print("📝 [Writer Agent]: Updating document...\n")
-        updated_document = ""
-        result = await writer_agent.run(writer_prompt)
-        updated_document = result.text
-        print("✅ Document updated successfully.\n")
+            print("📝 [Writer Agent]: Updating document...\n")
+            updated_document = ""
+            result = await writer_agent.run(writer_prompt)
+            updated_document = result.text
+            print("✅ Document updated successfully.\n")
 
     return session.conversation, updated_document
 
