@@ -5,6 +5,7 @@ from pathlib import Path
 
 from agent_framework import MCPStreamableHTTPTool
 from azure.identity.aio import DefaultAzureCredential
+from httpx import AsyncClient, Timeout
 
 from doc_reviewer.agents.base import (
     create_customer_agent,
@@ -68,6 +69,12 @@ async def run_review(
         research_dir=research_dir,
     )
 
+    github_http_client = AsyncClient(
+        headers={"Authorization": f"Bearer {settings.github_mcp_token}"},
+        follow_redirects=True,
+        timeout=Timeout(30, read=300),
+    )
+
     async with (
         DefaultAzureCredential() as credential,
         MCPStreamableHTTPTool(
@@ -80,12 +87,19 @@ async def run_review(
             url=settings.workiq_mcp_url,
             tool_name_prefix="workiq",
         ) as workiq_mcp,
+        MCPStreamableHTTPTool(
+            name="GitHub MCP",
+            url=settings.github_mcp_url,
+            tool_name_prefix="github",
+            request_timeout=30,
+            http_client=github_http_client,
+        ) as github_mcp,
     ):
         # Create agents
         research_agent = create_research_agent(
             settings,
             credential,
-            [ms_learn_mcp, workiq_mcp],
+            [ms_learn_mcp, workiq_mcp, github_mcp],
         )
         customer_agents = []
         for industry in industries:

@@ -1,6 +1,7 @@
 """Configuration for the documentation reviewer."""
 
 import os
+import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -20,6 +21,25 @@ def _default_research_dir() -> Path:
     return Path(__file__).resolve().parents[2] / "research"
 
 
+def _get_github_token() -> str:
+    """Get GitHub token from env var or fall back to gh CLI auth."""
+    token = os.environ.get("GITHUB_MCP_TOKEN", "")
+    if token:
+        return token
+    try:
+        result = subprocess.run(
+            ["gh", "auth", "token"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return ""
+
+
 @dataclass
 class Settings:
     """Application settings loaded from environment variables."""
@@ -27,9 +47,11 @@ class Settings:
     project_endpoint: str
     model_deployment_name: str
     workiq_mcp_url: str
+    github_mcp_token: str = ""
     research_dir: Path = field(default_factory=_default_research_dir)
     review_rounds: int = 3
     ms_learn_mcp_url: str = "https://learn.microsoft.com/api/mcp"
+    github_mcp_url: str = "https://api.githubcopilot.com/mcp/"
     langfuse_enabled: bool = False
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
@@ -45,6 +67,7 @@ class Settings:
             "AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-4o"
         )
         workiq_mcp_url = os.environ.get("WORKIQ_MCP_URL", "")
+        github_mcp_token = _get_github_token()
         review_rounds = int(os.environ.get("REVIEW_ROUNDS", "3"))
         research_dir = Path(
             os.environ.get(
@@ -81,6 +104,7 @@ class Settings:
             project_endpoint=project_endpoint,
             model_deployment_name=model_deployment_name,
             workiq_mcp_url=workiq_mcp_url,
+            github_mcp_token=github_mcp_token,
             research_dir=research_dir,
             review_rounds=review_rounds,
             langfuse_enabled=langfuse_enabled,
