@@ -1,0 +1,5 @@
+{
+  "name": "Python Azure",
+  "image": "ghcr.io/duongthaiha/python-azure-devcontainer:latest",
+  "remoteUser": "vscode"
+}
