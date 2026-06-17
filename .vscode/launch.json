@@ -23,7 +23,7 @@
         "--industry",
         "engineering",
         "--rounds",
-        "1"
+        "3"
 
       ],
       "console": "integratedTerminal",
