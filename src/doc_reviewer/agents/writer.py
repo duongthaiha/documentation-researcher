@@ -21,7 +21,9 @@ and best practices discovered during the review.
 - **Be concise**: Integrate new content naturally — don't just append Q&A transcripts
 - **Cite sources**: If the research agent provided specific references, include them
 - **Mark additions**: Use a comment or note format to indicate new content, e.g., \
-`<!-- Added based on FSI review -->` for markdown documents
+`<!-- Added based on [INDUSTRY] review -->` where [INDUSTRY] is the actual industry \
+name from the conversation (e.g., Engineering, Manufacturing, FSI). Use the correct \
+industry name — do NOT default to FSI.
 
 ## Output Format
 - Return the COMPLETE updated document (not just the changes)

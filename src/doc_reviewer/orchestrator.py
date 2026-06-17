@@ -236,10 +236,14 @@ def _build_research_prompt(session: ReviewSession) -> str:
 def _build_writer_prompt(session: ReviewSession) -> str:
     """Build the prompt for the writer agent."""
     history = _format_conversation_history(session.conversation)
+    industry_label = ", ".join(i.upper() for i in session.industries)
 
     return (
         f"Below is the original document and the full conversation transcript from "
-        f"the review session. Please produce an updated version of the document that "
+        f"the review session. The review was conducted from the perspective of the "
+        f"following industry/industries: {industry_label}. "
+        f"Mark any additions with `<!-- Added based on {industry_label} review -->`. "
+        f"Please produce an updated version of the document that "
         f"incorporates the new guidance and best practices identified during the review.\n\n"
         f"## Original Document\n\n{session.document_content}\n\n"
         f"## Review Conversation Transcript\n\n{history}"
