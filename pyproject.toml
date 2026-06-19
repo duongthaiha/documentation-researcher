@@ -16,6 +16,13 @@ dependencies = [
     "python-dotenv>=1.0.0",
 ]
 
+[project.optional-dependencies]
+# Cloud evaluation on Azure AI Foundry (see src/doc_reviewer/eval/).
+eval = [
+    "azure-ai-projects>=2.2.0",
+    "openai>=2.0.0",
+]
+
 [project.scripts]
 doc-reviewer = "doc_reviewer.main:main"
 
