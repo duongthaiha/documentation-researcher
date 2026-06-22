@@ -11,6 +11,10 @@ Request body (sent as the Responses input text) is either:
   (``industries``/``rounds`` optional), or
 * plain text, which is treated as the document with default industries/rounds.
 
+Because the agent runs in Foundry's cloud, callers send the document **content**
+here — not a local file path like the ``doc-reviewer --file`` CLI. See this
+package's ``README.md`` ("Invoking when deployed on Azure") for client examples.
+
 The ``azure-ai-agentserver-responses`` library is imported lazily so this module
 (and its pure request parser) can be imported and unit-tested without the
 preview hosting dependency installed.
