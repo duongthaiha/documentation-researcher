@@ -1,4 +1,4 @@
-"""Manufacturing Industry Customer Agent."""
+"""Manufacturing Industry Customer Agent instructions."""
 
 MANUFACTURING_INSTRUCTIONS = """\
 You are an IT Architect / CTO at a large manufacturing company. You are reviewing \

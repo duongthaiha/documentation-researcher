@@ -107,7 +107,7 @@ async def run_review(
             tags=["doc-reviewer", *industries],
             metadata={"industries": industry_label, "rounds": str(rounds)},
         ):
-            # Create agents
+            # Create local agents (instructions + tools shipped from code).
             research_agent = create_research_agent(
                 settings,
                 credential,
@@ -120,67 +120,131 @@ async def run_review(
 
             writer_agent = create_writer_agent(settings, credential)
 
-            # Phase 1: Customer Q&A rounds
-            print("\n" + "=" * 60)
-            print("📋 PHASE 1: Customer Review & Research")
-            print("=" * 60)
+            return await _run_conversation(
+                session, research_agent, customer_agents, writer_agent
+            )
 
-            for round_num in range(1, rounds + 1):
-                print(f"\n--- Round {round_num}/{rounds} ---\n")
 
-                # Each customer agent asks questions
-                for industry, customer_agent in customer_agents:
-                    customer_prompt = _build_customer_prompt(session, round_num)
+async def run_review_hosted(
+    settings: Settings,
+    document_content: str,
+    industries: list[str],
+    rounds: int,
+    research_dir: Path,
+) -> tuple[list[ConversationMessage], str]:
+    """Run a review using agents **hosted in Azure AI Foundry**.
 
-                    print(f"🏢 [{industry.upper()} Customer]: ", end="", flush=True)
-                    response_text = ""
-                    async for chunk in customer_agent.run(
-                        customer_prompt, stream=True
-                    ):
-                        if chunk.text:
-                            print(chunk.text, end="", flush=True)
-                            response_text += chunk.text
-                    print("\n")
+    Instead of constructing agents from code, this invokes the already-deployed
+    prompt agents by name through the project's Responses API (see
+    :mod:`doc_reviewer.agents.hosted`). The instructions, model, and tools are
+    resolved server-side, so no local MCP tool wiring is required.
+    """
+    # Imported lazily so the default (local) path doesn't require azure-ai-projects.
+    from doc_reviewer.agents.hosted import build_hosted_agents, create_project_client
 
-                    session.conversation.append(
-                        ConversationMessage(
-                            agent_name=f"{industry.upper()} Customer",
-                            content=response_text,
-                        )
-                    )
+    session = ReviewSession(
+        document_content=document_content,
+        industries=industries,
+        rounds=rounds,
+        research_dir=research_dir,
+    )
 
-                    # Research agent answers
-                    research_prompt = _build_research_prompt(session)
+    session_id = (
+        f"doc-review-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-"
+        f"{uuid.uuid4().hex[:6]}"
+    )
+    industry_label = "+".join(industries)
 
-                    print("🔬 [Research Agent]: ", end="", flush=True)
-                    response_text = ""
-                    async for chunk in research_agent.run(
-                        research_prompt, stream=True
-                    ):
-                        if chunk.text:
-                            print(chunk.text, end="", flush=True)
-                            response_text += chunk.text
-                    print("\n")
+    with (
+        create_project_client(settings) as project_client,
+        propagate_attributes(
+            session_id=session_id,
+            tags=["doc-reviewer", "hosted", *industries],
+            metadata={
+                "industries": industry_label,
+                "rounds": str(rounds),
+                "execution": "hosted",
+            },
+        ),
+    ):
+        research_agent, customer_agents, writer_agent = build_hosted_agents(
+            project_client, industries
+        )
+        return await _run_conversation(
+            session, research_agent, customer_agents, writer_agent
+        )
 
-                    session.conversation.append(
-                        ConversationMessage(
-                            agent_name="Research Agent",
-                            content=response_text,
-                        )
-                    )
 
-            # Phase 2: Writer updates the document
-            print("\n" + "=" * 60)
-            print("✍️  PHASE 2: Document Update")
-            print("=" * 60 + "\n")
+async def _run_conversation(
+    session: ReviewSession,
+    research_agent,
+    customer_agents,
+    writer_agent,
+) -> tuple[list[ConversationMessage], str]:
+    """Drive the two-phase review loop.
 
-            writer_prompt = _build_writer_prompt(session)
+    Agent-source agnostic: works with both local Agent Framework agents and
+    :class:`~doc_reviewer.agents.hosted.HostedAgent` instances, since both expose
+    the same ``run(prompt, stream=True)`` / ``await run(prompt)`` interface.
+    """
+    rounds = session.rounds
 
-            print("📝 [Writer Agent]: Updating document...\n")
-            updated_document = ""
-            result = await writer_agent.run(writer_prompt)
-            updated_document = result.text
-            print("✅ Document updated successfully.\n")
+    # Phase 1: Customer Q&A rounds
+    print("\n" + "=" * 60)
+    print("📋 PHASE 1: Customer Review & Research")
+    print("=" * 60)
+
+    for round_num in range(1, rounds + 1):
+        print(f"\n--- Round {round_num}/{rounds} ---\n")
+
+        # Each customer agent asks questions
+        for industry, customer_agent in customer_agents:
+            customer_prompt = _build_customer_prompt(session, round_num)
+
+            print(f"🏢 [{industry.upper()} Customer]: ", end="", flush=True)
+            response_text = ""
+            async for chunk in customer_agent.run(customer_prompt, stream=True):
+                if chunk.text:
+                    print(chunk.text, end="", flush=True)
+                    response_text += chunk.text
+            print("\n")
+
+            session.conversation.append(
+                ConversationMessage(
+                    agent_name=f"{industry.upper()} Customer",
+                    content=response_text,
+                )
+            )
+
+            # Research agent answers
+            research_prompt = _build_research_prompt(session)
+
+            print("🔬 [Research Agent]: ", end="", flush=True)
+            response_text = ""
+            async for chunk in research_agent.run(research_prompt, stream=True):
+                if chunk.text:
+                    print(chunk.text, end="", flush=True)
+                    response_text += chunk.text
+            print("\n")
+
+            session.conversation.append(
+                ConversationMessage(
+                    agent_name="Research Agent",
+                    content=response_text,
+                )
+            )
+
+    # Phase 2: Writer updates the document
+    print("\n" + "=" * 60)
+    print("✍️  PHASE 2: Document Update")
+    print("=" * 60 + "\n")
+
+    writer_prompt = _build_writer_prompt(session)
+
+    print("📝 [Writer Agent]: Updating document...\n")
+    result = await writer_agent.run(writer_prompt)
+    updated_document = result.text
+    print("✅ Document updated successfully.\n")
 
     return session.conversation, updated_document
 

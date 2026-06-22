@@ -92,6 +92,10 @@ doc-reviewer --file docs/architecture.md --industry engineering
 
 # Use a custom local research directory
 doc-reviewer --file docs/architecture.md --research-dir ./research
+
+# Run against agents already deployed to Foundry (prompt agents) instead of
+# building them locally — see "Deploying Agents to Foundry" below
+doc-reviewer --file docs/architecture.md --hosted --industry fsi
 ```
 
 The updated document is saved as `<original_name>_reviewed.<ext>` in the same directory.
@@ -102,11 +106,13 @@ Place Markdown research documentation in the repository-level `research/` folder
 
 ## Adding a New Industry
 
-1. Create `src/doc_reviewer/agents/<industry>_customer.py` with an `<INDUSTRY>_INSTRUCTIONS` string
-2. Add the industry to `create_customer_agent()` in `src/doc_reviewer/agents/base.py`
-3. Add to `SUPPORTED_INDUSTRIES` in `src/doc_reviewer/main.py`
+1. Create a package `src/doc_reviewer/agents/<industry>_customer/` (copy an existing customer folder such as `fsi_customer/`) with `instructions.py`, `factory.py`, `definition.py`, `agent.yaml`, `deploy.py`, `README.md`, and an `__init__.py` that re-exports the symbols
+2. Register the industry in `src/doc_reviewer/agents/registry.py` (`CUSTOMER_INDUSTRIES` and `CUSTOMER_AGENT_PACKAGES`)
+3. `main.py` (`SUPPORTED_INDUSTRIES`) and `base.create_customer_agent()` pick it up automatically from the registry
 
 ## Project Structure
+
+Each agent is a **self-contained package** so it can run locally via the Microsoft Agent Framework or be deployed to Azure AI Foundry as a **prompt agent**.
 
 ```
 .
@@ -117,15 +123,56 @@ Place Markdown research documentation in the repository-level `research/` folder
     ├── orchestrator.py      # Two-phase conversation orchestrator
     ├── research_corpus.py   # Local Markdown research retrieval
     ├── agents/
-    │   ├── base.py          # Agent factory
-    │   ├── research.py      # Research agent
-    │   ├── fsi_customer.py  # FSI customer persona
-    │   ├── manufacturing_customer.py  # Manufacturing customer persona
-    │   ├── engineering_customer.py  # Engineering/DevOps customer persona
-    │   └── writer.py        # Document writer agent
+    │   ├── base.py          # Backwards-compatible create_* factory API
+    │   ├── shared.py        # Shared chat-client helper
+    │   ├── registry.py      # Single source of truth for agents/industries
+    │   ├── _deploy_common.py # Shared Foundry deploy helper
+    │   ├── deploy_all.py    # Deploy all prompt agents
+    │   ├── fsi_customer/    # FSI customer persona (instructions/factory/definition/agent.yaml/deploy)
+    │   ├── manufacturing_customer/  # Manufacturing customer persona
+    │   ├── engineering_customer/    # Engineering/DevOps customer persona
+    │   ├── research/        # Research agent (with MCP tool definitions)
+    │   └── writer/          # Document writer agent
     └── document/
         └── loader.py        # Markdown/PDF loader
 ```
+
+Every agent folder contains: `instructions.py` (system prompt), `factory.py` (`create_agent` for local runs), `definition.py` (`build_prompt_agent_definition` → Foundry `PromptAgentDefinition`), `agent.yaml` (metadata), `deploy.py` (publish/version to Foundry), and `README.md`.
+
+## Deploying Agents to Foundry (prompt agents)
+
+Each agent can be deployed to your Azure AI Foundry project as a versioned prompt agent. Deploys default to a **dry run** (they print the intended action); pass `--publish` to actually create/version the agent.
+
+```bash
+pip install "doc-reviewer[deploy]"
+
+# Deploy a single agent
+python -m doc_reviewer.agents.fsi_customer.deploy            # dry run
+python -m doc_reviewer.agents.fsi_customer.deploy --publish  # publish
+
+# Deploy all agents
+doc-reviewer-deploy            # dry run
+doc-reviewer-deploy --publish  # publish
+```
+
+Deployment reuses `AZURE_AI_PROJECT_ENDPOINT` and `AZURE_AI_MODEL_DEPLOYMENT_NAME`. Authentication uses `DefaultAzureCredential` (run `az login`).
+
+### MCP tools for the hosted Research agent
+
+When deployed, the Research agent runs in Foundry's cloud, so its MCP tools differ from the local run:
+
+- **Microsoft Learn** (public) is always included.
+- **WorkIQ / GitHub** require either a cloud-reachable URL or — for authenticated servers — a **Foundry connection**. Foundry rejects inline auth tokens/headers on MCP tools, so set `GITHUB_MCP_CONNECTION_ID` (and optionally `WORKIQ_MCP_CONNECTION_ID`) to a connection in your project. A `localhost` URL (e.g. a local WorkIQ) is unreachable from the cloud and is skipped automatically with a warning.
+
+### Running against the hosted agents
+
+Once deployed, run the review against the hosted prompt agents instead of building them locally:
+
+```bash
+doc-reviewer --file docs/architecture.md --hosted
+```
+
+In `--hosted` mode, `main.py` calls `run_review_hosted`, which invokes each deployed agent **by name** through the project's Responses API (`get_openai_client(agent_name=...).responses.create(...)`); the model, instructions, and tools are resolved server-side. The same two-phase conversation loop drives both local and hosted execution.
 
 ## License
 

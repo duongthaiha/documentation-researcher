@@ -5,12 +5,13 @@ import asyncio
 import sys
 from pathlib import Path
 
+from doc_reviewer.agents.registry import CUSTOMER_INDUSTRIES
 from doc_reviewer.config import Settings
 from doc_reviewer.document.loader import load_document
 from doc_reviewer.observability import configure_observability, flush_observability
-from doc_reviewer.orchestrator import run_review
+from doc_reviewer.orchestrator import run_review, run_review_hosted
 
-SUPPORTED_INDUSTRIES = ["fsi", "manufacturing", "engineering"]
+SUPPORTED_INDUSTRIES = list(CUSTOMER_INDUSTRIES)
 
 
 def parse_args() -> argparse.Namespace:
@@ -41,6 +42,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--research-dir",
         help="Directory of local Markdown research docs (default: ./research or RESEARCH_DIR)",
+    )
+    parser.add_argument(
+        "--hosted",
+        action="store_true",
+        help="Invoke agents already deployed to Azure AI Foundry (prompt agents) "
+        "by name, instead of building them locally. Requires the 'deploy' extra "
+        "and previously deployed agents (see doc_reviewer.agents.deploy_all).",
     )
     return parser.parse_args()
 
@@ -85,10 +93,13 @@ async def async_main() -> None:
     print(f"🏭 Industries: {', '.join(args.industry)}")
     print(f"🔄 Rounds: {settings.review_rounds}")
     print(f"🔎 Research directory: {settings.research_dir}")
+    print(f"🚀 Execution mode: {'hosted (Foundry)' if args.hosted else 'local'}")
+
+    review = run_review_hosted if args.hosted else run_review
 
     try:
         # Run review
-        conversation, updated_document = await run_review(
+        conversation, updated_document = await review(
             settings=settings,
             document_content=document_content,
             industries=args.industry,

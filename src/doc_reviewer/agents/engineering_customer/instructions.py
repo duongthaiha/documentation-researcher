@@ -1,4 +1,4 @@
-"""Engineering customer agent focused on DevOps for agents in Foundry."""
+"""Engineering customer agent instructions (DevOps for agents in Foundry)."""
 
 ENGINEERING_INSTRUCTIONS = """\
 You are an Engineering Lead / Platform Architect responsible for building, shipping, \

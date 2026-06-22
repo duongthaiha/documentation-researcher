@@ -52,11 +52,9 @@ Many customers find it useful to have an adoption checklist handy that outlines 
 |  | Define role-based access control assignments for platform administrators, project managers, and project users. Root your assignments in the Microsoft best practice of least-privilege. |
 |  | Determine your cost management strategy for tracking costs associated with Foundry, such as model, agent, and tool calling, or associate resources. |
 |  | Enable monitoring capabilities to capture information related to your Foundry environment and the agents created there. |
-|  | <!-- Added based on ENGINEERING review --> Define your GitOps boundary for Foundry: identify which artifacts are managed as infrastructure, which are managed as data-plane definitions through SDK/REST automation, and which portal actions are allowed only for experimentation or break-glass use. |
-|  | <!-- Added based on ENGINEERING review --> Define a CI/CD and release engineering process for prompts, agent configurations, tool/MCP contracts, connections, model bindings, and evaluations, including immutable versioning and rollback targets. |
-|  | <!-- Added based on ENGINEERING review --> Define a developer workflow for local testing, sandbox projects, mocked tools, isolated Azure-backed test resources, and cloud-backed evaluation gates. |
-|  | <!-- Added based on ENGINEERING review --> Define operational runbooks for quota exhaustion, model retirement, downstream tool outages, and emergency failback. |
-|  | <!-- Added based on ENGINEERING review --> Define minimum audit evidence for release provenance, including commit SHA, pipeline run, approvers, evaluation results, active version, and approved rollback target. |
+|  | <!-- Added based on ENGINEERING review --> Define your source control and CI/CD operating model for Foundry, including what is promoted via IaC versus SDK/REST automation, and how rollback will work for prompts, agents, model mappings, tools, and knowledge artifacts. |
+|  | <!-- Added based on ENGINEERING review --> Define a drift-management policy for portal edits in development, test, and production-like environments. |
+|  | <!-- Added based on ENGINEERING review --> Define a minimum telemetry baseline and release gates for agent changes before any workload is considered ready to move from development into broader testing or production rollout. |
 
 We’ll start with the considerations to keep in mind for organizing projects inside Microsoft Foundry.
 
@@ -94,12 +92,12 @@ To fulfill this “enterprise-wide” vision, you will have:
 - **Consumption Platform:** an application layer where users can consume your agents or models – such as CoPilot Studio, or your own custom application where you expose deployed models and agents.
 
 <!-- Added based on ENGINEERING review -->
-For engineering-led platform rollouts, it is helpful to think about Foundry adoption across **two deployment planes**:
+For engineering-led rollouts, we recommend a two-layer promotion model:
 
-1. **Control plane / infrastructure** – Foundry account and projects, networking, model deployments, connections, RBAC, diagnostic settings, Log Analytics, Application Insights, APIM, and policy assignments.
-2. **Data plane / agent artifacts** – agent definitions and versions, prompts and instructions, tool bindings, evaluation datasets and configurations, and certain knowledge or toolbox objects that are not managed as ARM resources.
+1. **Platform / control-plane promotion:** provision and update Foundry accounts, projects, networking, RBAC, diagnostic settings, APIM / AI Gateway, model deployments, and dependent Azure resources using IaC such as Bicep or Terraform, optionally orchestrated with [`azd`](https://learn.microsoft.com/azure/developer/azure-developer-cli/extensions/azure-ai-foundry-extension).
+2. **Agent application / data-plane promotion:** version prompts, agent definitions, tool or MCP contracts, evaluation datasets, and policy files in Git, then deploy and update agents, versions, evaluations, and other project-scoped artifacts through SDK, REST, CLI, or `azd` post-provision automation.
 
-This distinction is important because organizations typically use **infrastructure-as-code** for the control plane, and **SDK / REST / post-provision automation** for data-plane artifacts that are not fully ARM-manageable. See [Authentication and authorization in Microsoft Foundry](https://learn.microsoft.com/azure/foundry/concepts/authentication-authorization-foundry#control-plane-and-data-plane).
+This distinction is important because not every Foundry-related artifact is a first-class ARM resource. For example, Foundry IQ knowledge sources and knowledge bases are data-plane objects and should be created or updated through post-provision SDK/REST automation rather than ARM/Bicep. See [Deploy an agent to Microsoft Foundry with the Azure Developer CLI AI agent extension](https://learn.microsoft.com/azure/developer/azure-developer-cli/extensions/azure-ai-foundry-extension), [Add a new connection to your project](https://learn.microsoft.com/azure/foundry/how-to/connections-add), and local implementation notes referenced during the ENGINEERING review.
 
 **The “Department-level” Perspective**
 
@@ -116,13 +114,13 @@ In this approach, you’ll give developers or developer teams their own projects
 | **TIP:** You may be asking, “How many model deployments should I have inside each Foundry resource?”, “Is it recommended that users share model deployments?”, or “Should I give each user their own model deployment?” The answer here depends on your cost management/tracking requirements. |
 
 <!-- Added based on ENGINEERING review -->
-For engineering teams, this department-level pattern also works well for establishing a **sandbox strategy**:
+For engineering organizations planning to promote workloads beyond experimentation, it is helpful to distinguish between:
 
-- **Personal or team dev projects** for iterative experimentation with prompts, tools, and evaluations,
-- **Shared dev / test / UAT projects** for integration, RBAC validation, network validation, and release qualification,
-- **Production environments** with stricter write controls, pinned versions, and formal promotion pipelines.
+- **Exploration environments:** shared, lower-cost, experimentation-focused Foundry resources with multiple projects.
+- **Promotable dev/test environments:** environment-specific resources and projects that preserve the same deployment model, logical naming, observability, and governance patterns you intend to carry into production.
+- **UAT / pre-production environments:** the closest non-production mirror of production in terms of networking, connections, authentication, quotas, and monitoring.
 
-This allows developers to move quickly without creating uncontrolled drift in shared environments.
+This preserves environment parity without requiring identical spend. In practice, teams should keep the same topology pattern, deployment pipeline shape, aliasing strategy, and observability contract across environments, while scaling down quotas, SKUs, corpus size, and capacity where appropriate. See [Foundry planning](https://learn.microsoft.com/azure/foundry/concepts/planning) and [Foundry architecture](https://learn.microsoft.com/azure/foundry/concepts/architecture).
 
 **Department-level Enclaves**
 
@@ -194,9 +192,6 @@ There is also a modified version of this template that supports customer-managed
 | --- |
 | **NOTE:** As agentic platform capabilities continue to mature, we are seeing customers move towards including Azure API Management as a core component of their Foundry deployments to manage model and agent APIs via policies. While there is a [deployment template of this private standard agent setup that includes APIM](https://github.com/microsoft-foundry/foundry-samples/tree/main/infrastructure/infrastructure-setup-bicep/16-private-network-standard-agent-apim-setup-preview), there are efforts underway to integrate APIM and Foundry via the [AI Gateway feature](https://learn.microsoft.com/en-us/azure/foundry/configuration/enable-ai-api-management-gateway-portal) (currently in public preview). |
 
-<!-- Added based on ENGINEERING review -->
-From a platform engineering standpoint, choose one of these topologies as your **enterprise default** and make exceptions explicit. In many engineering organizations with stronger governance requirements, the default is typically the **private** pattern, with public or hybrid setups reserved for approved exceptions. This improves repeatability for networking, diagnostics, DNS, private endpoints, and operational support. See [Set up private networking for Foundry Agent Service](https://learn.microsoft.com/azure/foundry/agents/how-to/virtual-networks).
-
 Deployment 3 – Standard Agent Setup (Hybrid)
 
 Lastly, there is one more deployment configuration for Foundry that is not often seen, but deserves mention: the hybrid configuration. The key differentiator with this configuration is the ability to switch between public and private Foundry access. Organizations will want to use this deployment configuration when they want:
@@ -234,57 +229,82 @@ In a constantly evolving space like AI, it is important for an organization to d
 3. **Region availability:** Along the same lines as deployment types, it is important when selecting a model to verify which regions are supported for the model your team may be evaluating. Regional support can vary depending on available capacity, and not all models get rolled out to all regions.
 
 <!-- Added based on ENGINEERING review -->
-From an engineering perspective, your model strategy should also define:
+For engineering teams, a practical model strategy should also define **how model changes are promoted and rolled back**. We recommend using **logical model aliases** in application configuration (for example, `chat-primary`, `reasoning-secondary`, or `judge-model`) and managing the environment-specific mapping of those aliases to actual deployments through source control and pipeline promotion. This allows teams to change capacity, patch versions, or deployment targets without hardcoding model endpoints in application code.
 
-- **Approved deployment aliases per environment** rather than hardcoding raw model names into agent definitions,
-- **Successor models for critical workloads** to address retirement or emergency retirement events,
-- **Alternate deployments** for capacity or quota-related failover where your compliance requirements allow,
-- **Release gates for model swaps**, since changing a model binding should be treated as a releasable change requiring regression evaluations.
-
-For quota and capacity planning, see [Azure OpenAI in Microsoft Foundry Models quotas and limits](https://learn.microsoft.com/azure/foundry/openai/quotas-limits) and [Foundry Agent Service limits, quotas, and regional support](https://learn.microsoft.com/azure/foundry/agents/concepts/limits-quotas-regions). For model lifecycle and emergency retirement considerations, see [Microsoft Foundry Models lifecycle and support policy](https://learn.microsoft.com/azure/foundry/openai/concepts/model-retirements) and [Model versions in Microsoft Foundry Models](https://learn.microsoft.com/azure/foundry/foundry-models/concepts/model-versions).
+When model behavior changes are material—such as a model family change, a region change, or a meaningful latency/cost profile change—prefer releasing a **new agent version** that references the new model mapping and validating it with evaluations before shifting traffic. For lower-risk changes such as approved capacity moves, teams may update the alias mapping directly through controlled deployment automation. In both cases, rollback should be explicit: revert the alias mapping or route traffic back to the previous agent version. See [model lifecycle retirement](https://learn.microsoft.com/en-us/azure/foundry/concepts/model-lifecycle-retirement), [deployment types](https://learn.microsoft.com/en-us/azure/foundry/foundry-models/concepts/deployment-types), and [Manage hosted agents](https://learn.microsoft.com/azure/foundry/agents/how-to/manage-hosted-agent).
 
 Planning your user access strategy for Foundry
 
 <!-- Added based on ENGINEERING review -->
-A practical access strategy for Foundry should distinguish between **platform administration**, **project management**, **development**, and **operational review** responsibilities. At minimum, customers should:
+A practical Foundry user access strategy should separate **human access** from **runtime access** and apply least-privilege at the lowest reasonable scope.
 
-- Assign RBAC to **groups**, not individual users, wherever possible.
-- Separate permissions for **platform baseline management** (networking, policies, diagnostics, RBAC) from **project-level development** (agents, evaluations, files, connections where appropriate).
-- Restrict direct write access in **production** so promotions occur through approved pipelines rather than ad hoc portal edits.
-- Provide operational teams with read access to **Application Insights**, **Log Analytics**, and relevant diagnostic destinations so they can investigate incidents and review evaluation and runtime evidence.
+We recommend the following baseline role model:
 
-<!-- Added based on ENGINEERING review -->
-For engineering organizations, a common model is:
+- **Platform administrators:** a small set of centrally managed operators with access at the Foundry account or resource scope, plus any required privileges for networking, APIM, monitoring, and dependent Azure resources.
+- **Project managers / delegated administrators:** project-scoped users who can manage project-level access and developer workflows without receiving broad subscription- or resource-group-level rights.
+- **Developers / agent builders:** project-scoped users with the minimum rights necessary to build, test, and evaluate inside their project.
+- **Runtime identities:** managed identities used by agents, pipelines, APIM, and other automation. These should never be replaced by broad human or shared service credentials.
+- **Consumers:** users of downstream applications or APIs rather than users with direct Foundry administration permissions.
 
-- **Platform administrators** manage Foundry accounts, model deployment governance, networking, private endpoints, policy assignments, diagnostic settings, and shared monitoring resources.
-- **Project managers / technical leads** govern project structure, approve releases, and coordinate access to connected resources.
-- **Project users / developers** build and test agents, prompts, tools, and evaluations within their assigned project scopes.
-- **Operations / SRE reviewers** consume logs, traces, dashboards, and release manifests, but do not necessarily need broad write access inside Foundry.
+Microsoft provides Foundry-specific roles such as [Foundry User, Foundry Project Manager, and Foundry Owner / Foundry Account Owner](https://learn.microsoft.com/azure/foundry/concepts/rbac-foundry), and Azure built-in roles for AI and machine learning scenarios are documented [here](https://learn.microsoft.com/azure/role-based-access-control/built-in-roles/ai-machine-learning).
 
 <!-- Added based on ENGINEERING review -->
-Production should generally avoid “always use latest” behaviors for critical endpoints. Prefer pinned, approved versions and pipeline-driven promotions so access control and approval workflows remain auditable.
+As a best practice:
+
+- Assign **platform-level roles** only to central operations groups, ideally through Privileged Identity Management (PIM) or just-in-time elevation.
+- Assign **developer roles** at the **project scope**, not at subscription or resource group scope, unless a specific Azure resource requires separate access.
+- Grant **resource-specific roles** on connected services only to the identities that require them—for example Storage Blob Data Reader/Contributor, Search Index Data Reader/Contributor, Cosmos DB data roles, Key Vault Secrets User, or Log Analytics Reader.
+- Use **Microsoft Entra groups** as the principal assignment target wherever possible.
+
+<!-- Added based on ENGINEERING review -->
+We also recommend a **secretless-by-default** operating model:
+
+- Use workload identity federation for CI/CD systems such as GitHub Actions or Azure DevOps.
+- Use managed identity for Hosted agents and other runtimes to access downstream Azure resources.
+- Use managed identity for APIM where it calls Azure OpenAI, Foundry, Content Safety, or other Azure backends.
+- Only use secrets where the downstream system cannot authenticate with Microsoft Entra ID; if unavoidable, store them in Key Vault and inject them at deployment or runtime rather than storing them in code or repositories.
+
+This aligns with [`azd` guidance for Foundry](https://learn.microsoft.com/azure/developer/azure-developer-cli/extensions/azure-ai-foundry-extension) and the managed identity guidance exposed in [Manage hosted agents](https://learn.microsoft.com/azure/foundry/agents/how-to/manage-hosted-agent).
 
 Adopting a cost management strategy in Foundry
 
 <!-- Added based on ENGINEERING review -->
-A cost management strategy for Foundry should account for more than model tokens alone. Development and test environments often accumulate spend across:
+For engineering teams, the most effective cost strategy is to make the **Foundry project the primary ownership and reporting boundary**, then enrich that with tags, telemetry, quotas, and gateway policies for finer attribution.
 
-- model deployments and capacity reservations,
-- token usage for prompts, tool calls, and evaluations,
-- storage, search, and Cosmos DB usage for capability hosts,
-- Application Insights and Log Analytics ingestion and retention,
-- APIM and networking components used for governance.
+We recommend:
 
-<!-- Added based on ENGINEERING review -->
-To improve cost visibility and accountability:
-
-- Segment Foundry resources at boundaries where you need separate cost attribution.
-- Standardize tagging for environment, department, owner, use case, and platform lineage.
-- Route model and agent access through governance layers such as APIM where token and rate-limit policies can help prevent runaway consumption.
-- Track evaluation usage separately from interactive development usage where possible; repeated regressions and large golden datasets can create meaningful nonproduction spend.
+- Using one project per product, use case, or team boundary where cost ownership differs.
+- Tagging all deployable resources with consistent metadata such as `costCenter`, `department`, `project`, `agentName`, `environment`, `owner`, and `releaseVersion`.
+- Emitting per-request telemetry that records agent name/version, model deployment name, prompt version, token usage, tool usage, latency, and success/failure status.
 
 <!-- Added based on ENGINEERING review -->
-Engineering teams should also include **capacity headroom** as part of release readiness. For critical agents, identify the approved primary and alternate model deployments ahead of time so quota exhaustion or regional capacity issues can be handled operationally rather than improvisationally.
+At minimum, teams should measure:
+
+- prompt tokens
+- completion tokens
+- total tokens
+- estimated token cost
+- tool-call count and duration
+- retrieval/query cost contribution where applicable
+- evaluation costs
+- latency and retry overhead
+- error and throttling rates
+
+Foundry observability provides token, latency, error, and quality visibility, and APIM AI Gateway provides token governance and policy support. See [Foundry observability](https://learn.microsoft.com/azure/foundry/concepts/observability), [Enforce token limits for models](https://learn.microsoft.com/azure/foundry/control-plane/how-to-enforce-limits-models), and [APIM AI gateway policies](https://learn.microsoft.com/azure/api-management/api-management-policies#ai-gateway).
+
+<!-- Added based on ENGINEERING review -->
+A practical cost-control baseline includes:
+
+1. **Per-project token quotas and TPM caps** using AI Gateway / APIM where applicable.
+2. **Environment-specific quota envelopes**—lower for dev, moderate for test/UAT, and approved capacity for production.
+3. **Budget alerts and anomaly detection** at subscription, resource group, tag, or project level.
+4. **Scheduled cleanup** for stale non-production assets, obsolete agent versions, and dormant experimental resources.
+5. **Optional semantic caching** only where correctness and compliance allow.
+
+Where model deployments are shared across teams, adopt a layered quota model:
+- **Tier 1:** Azure model capacity planning by model, region, and deployment type.
+- **Tier 2:** project-level quotas via Foundry AI Gateway or APIM.
+- **Tier 3:** application- or client-level quotas via APIM subscriptions, products, or policy.
 
 Governance & monitoring strategy in Foundry
 
@@ -300,19 +320,42 @@ The list above may not be exhaustive but is a well-rounded set of asks that we c
 Model & Agentic API Governance via an AI Gateway
 
 <!-- Added based on ENGINEERING review -->
-For engineering organizations, API governance is often the layer that turns a collection of Foundry resources into a managed platform. Azure API Management can provide:
+For engineering-led Foundry adoption, we recommend treating **Azure API Management (APIM)** or the **Foundry AI Gateway** as the policy enforcement plane for model and agent APIs, with all gateway configuration stored in source control and promoted through environments just like application code.
 
-- token and rate limit policies for model and agent endpoints,
-- a stable consumer-facing endpoint while backend versions change,
-- a place to apply authentication, header, and routing standards,
-- a practical failback layer when you need to redirect traffic to an alternate model deployment, MCP/tool backend revision, or separately published agent endpoint.
+At a minimum, place the following artifacts under version control:
+
+- APIM instance or workspace configuration
+- APIs, products, backends, and subscriptions
+- policy XML and policy fragments
+- named value references and environment overlays
+- test assertions for policy behavior
+
+See [Enable AI Gateway in Foundry](https://learn.microsoft.com/azure/foundry/configuration/enable-ai-api-management-gateway-portal), [AI gateway capabilities in APIM](https://learn.microsoft.com/azure/api-management/genai-gateway-capabilities), and the [APIM AI gateway policy reference](https://learn.microsoft.com/azure/api-management/api-management-policies#ai-gateway).
 
 <!-- Added based on ENGINEERING review -->
-When using APIM or a similar gateway, define whether it is the mandatory access path for:
-- production model endpoints,
-- published agent applications,
-- department-shared tools and MCP servers,
-- canary or blue/green routing patterns implemented outside Foundry-native traffic controls.
+A recommended baseline policy set for model and agent APIs includes:
+
+1. **Authentication and authorization** using Microsoft Entra ID or managed identity where possible.
+2. **Token limits and quotas** using AI gateway token policies.
+3. **Token metric emission** for chargeback and monitoring.
+4. **Content safety checks** where appropriate.
+5. **Rate limiting and concurrency controls.**
+6. **Retry and circuit-breaker behavior** for resilient backend access.
+7. **Backend routing and failover** when multiple deployments or regions are used.
+8. **Caching** only where the use case tolerates it.
+9. **Request/response logging with redaction.**
+10. **Header stamping / correlation IDs** to correlate project, agent, version, and environment.
+
+<!-- Added based on ENGINEERING review -->
+We recommend the following promotion pattern:
+
+- update gateway policies through pull requests
+- lint and validate policies in CI
+- deploy to a development APIM environment or workspace
+- run policy tests, including quota, safety, authentication, and routing behavior
+- promote the same versioned policy package to test and production-like environments
+
+Avoid editing APIM policies directly in production-like environments except as an emergency measure. If a break-glass change is made, reconcile it back into source control immediately.
 
 Control model access with Azure Policy
 
@@ -338,46 +381,124 @@ Alongside enablement of these features across all agent development efforts, it 
 | **TIP:** Microsoft has released a guide for developer teams to familiarize themselves not only with red teaming as a concept, but also how to implement red teaming using Microsoft Foundry’s [AI Red Teaming agent](https://learn.microsoft.com/en-us/azure/foundry/concepts/ai-red-teaming-agent). |
 
 <!-- Added based on ENGINEERING review -->
-For engineering teams, observability should be tied directly to **quality gates and release controls**. Recommended practices include:
+For engineering teams, we recommend defining explicit **release-quality gates** before promoting any meaningful agent change. At a minimum, the following gates should be considered:
 
-- Maintain **golden datasets** for functional, tool-usage, and safety/compliance scenarios.
-- Run **automated regression evaluations** whenever prompts, agent configuration, model bindings, tool contracts, or orchestration logic change.
-- Use **dimension-specific pass/fail thresholds** rather than a single blended score.
-- Compare candidate versions not just against absolute thresholds, but also against the **current approved baseline**.
-- Use **trace-based evaluations** on realistic traffic where possible, especially during canary or limited rollout stages.
+1. **Static and configuration validation**
+   - validate `agent.yaml` or equivalent agent specifications
+   - validate prompt file presence and template structure
+   - validate MCP / OpenAPI / tool schemas
+   - validate IaC, policy, and configuration packages
+   - fail builds if secrets are detected in code or manifests
 
-See [Run evaluations in the cloud by using the Microsoft Foundry SDK](https://learn.microsoft.com/azure/foundry/how-to/develop/cloud-evaluation), [Run evaluations from the Microsoft Foundry portal](https://learn.microsoft.com/azure/foundry/how-to/evaluate-generative-ai-app), and [Convert agent traces into evaluation datasets](https://learn.microsoft.com/azure/foundry/observability/how-to/traces-to-dataset).
+2. **Unit and component tests**
+   - prompt assembly and templating logic
+   - tool response parsing
+   - fallback and routing logic
+   - guardrail helper behavior
+
+3. **Tool / contract tests**
+   - request and response schema validation
+   - timeout and authorization failure handling
+   - malformed payload behavior
+   - fallback behavior when tools or retrieval systems are unavailable
+
+4. **Golden dataset regressions**
+   - compare current and candidate releases on representative prompts
+   - fail on unacceptable regressions in groundedness, relevance, task completion, or tool-use accuracy
+
+5. **Safety and red-team baselines**
+   - prompt injection attempts
+   - jailbreak attempts
+   - system prompt leakage probes
+   - data exfiltration attempts
+   - unsafe content scenarios
+
+6. **Performance and cost thresholds**
+   - P95 latency change
+   - token growth per request
+   - tool-call count per request
+   - dependency failure rate
+   - throttling or quota exhaustion
+
+7. **Trace review and, where required, human approval**
+   - especially for model-family changes, tool-contract changes, new privileged connectors, or major prompt rewrites
+
+This aligns with [Cloud Adoption Framework guidance on secure AI agent processes](https://learn.microsoft.com/azure/cloud-adoption-framework/ai-agents/build-secure-process#4-agent-observability), [Evaluate your AI agents](https://learn.microsoft.com/azure/foundry/observability/how-to/evaluate-agent), and [Monitor agents with the Agent Monitoring Dashboard](https://learn.microsoft.com/azure/foundry/observability/how-to/how-to-monitor-agents-dashboard).
 
 <!-- Added based on ENGINEERING review -->
-Cloud evaluation results are stored in the Foundry project and can be correlated with Application Insights when connected. In practice, engineering teams usually use:
-- **Foundry project history** for evaluation runs, reports, and versioned datasets,
-- **Application Insights / Log Analytics** for traces and runtime evidence,
-- **Git and the CI/CD system** for approval records, threshold definitions, and rollback targets.
+For Hosted agents specifically, prefer **version-based canary rollout** using agent versioning and traffic routing. A practical progression is to deploy a new version, route a small percentage of traffic to it, verify quality/safety/SLO metrics, then increase traffic gradually. If regression is detected, route traffic back to the previous version immediately. See [Manage hosted agents](https://learn.microsoft.com/azure/foundry/agents/how-to/manage-hosted-agent).
 
 <!-- Added based on ENGINEERING review -->
-When releasing changes, prefer **immutable agent versions** and rollback by routing traffic back to the last known-good version instead of editing in place. Microsoft documents version immutability and version-targeted requests as a core part of the [agent development lifecycle](https://learn.microsoft.com/azure/foundry/agents/concepts/development-lifecycle).
+Teams should also define **artifact-specific change management**:
+
+- **Hosted agent code / image / runtime settings:** create a new Hosted agent version; rollback by routing traffic back.
+- **Prompts and system instructions:** treat as versioned application artifacts in Git; avoid portal-only edits in shared environments; rollback by redeploying the prior version or routing to the previous agent version.
+- **Model deployment mappings:** manage through source-controlled alias mappings; rollback by restoring the prior mapping or prior agent version.
+- **Tool / MCP contracts:** version contracts explicitly and keep prior versions available during rollout.
+- **Foundry IQ knowledge definitions and retrieval configuration:** treat as versioned data-plane artifacts managed by post-provision SDK/REST automation; prefer blue/green knowledge base or index version patterns for safe rollback.
+- **APIM / AI Gateway policies:** version and promote through pipeline; rollback by redeploying the prior policy package.
+
+Prompt edits or model swaps made directly in the portal should be reserved for break-glass situations and reconciled back into Git immediately.
 
 <!-- Added based on ENGINEERING review -->
-**Supported release topology and rollback patterns**
+A practical **minimum telemetry baseline** for development and test environments should include:
 
-The rollout strategy you use should reflect the type of Foundry asset you are deploying:
+**Request and correlation metadata**
+- timestamp
+- environment
+- service/app name
+- agent name
+- agent version
+- release version or Git SHA
+- trace ID and span ID
+- conversation ID and thread ID where applicable
+- request/run ID
+- caller application or pseudonymous user identity
 
-- **Prompt-based agents / stable agent endpoints:** use **pinned versions** in production. The stable endpoint supports “latest” or a specific pinned version, but does **not** support traffic splitting. See [Configure and share your agent](https://learn.microsoft.com/azure/foundry/agents/how-to/configure-agent).
-- **Hosted agents:** use immutable versions with **weighted rollout** for canary or blue/green patterns where appropriate. See [What are hosted agents?](https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agents#platform-details).
-- **Published Agent Applications:** current behavior is effectively **one active deployment at a time**, with 100% of traffic routed to that deployment. See [Publish your agent as an Agent Application](https://learn.microsoft.com/azure/foundry/agents/how-to/agent-applications).
+**Model and prompt metadata**
+- model deployment name
+- model family/version where available
+- deployment region
+- prompt version or system prompt hash
+- tool policy version
+- knowledge base or index version
+- APIM policy package version
+- feature or routing flags
+
+**Tool and retrieval telemetry**
+- tool name and contract version
+- target endpoint/service
+- duration
+- success/failure
+- status code or exception class
+- retry count
+- timeout flag
+- sanitized input and output summaries
+- fallback path
+
+**Cost and reliability telemetry**
+- prompt, completion, and total tokens
+- estimated cost
+- tool-call count
+- retrieval call count
+- cache hit/miss if applicable
+- end-to-end latency
+- model latency
+- tool latency
+- timeout rate
+- error rate
+- throttling / 429 rate
+
+**Quality and safety telemetry**
+- scheduled and continuous evaluation scores
+- red-team results
+- pass/fail thresholds used for the release
+- comparison against the previous release
+
+See [Set up tracing in Microsoft Foundry](https://learn.microsoft.com/azure/foundry/observability/how-to/trace-agent-setup), [Monitor agents with the Agent Monitoring Dashboard](https://learn.microsoft.com/azure/foundry/observability/how-to/how-to-monitor-agents-dashboard), and [Evaluate your AI agents](https://learn.microsoft.com/azure/foundry/observability/how-to/evaluate-agent).
 
 <!-- Added based on ENGINEERING review -->
-As a result:
-- For **prompt agents**, emulate rings using separate environments or gateway-based routing rather than expecting native weighted traffic splitting on a single stable endpoint.
-- For **hosted agents**, use low-percentage rollout, monitor traces and quality signals, then expand traffic in stages.
-- For **published applications**, implement advanced blue/green patterns at the gateway or application routing layer if you need more than single-active deployment behavior.
-
-<!-- Added based on ENGINEERING review -->
-Emergency failback should be planned by failure mode:
-- **Prompt/config regression:** re-pin to the prior approved agent version.
-- **Model retirement or emergency retirement:** switch to a prevalidated successor model deployment alias and rerun critical regression checks.
-- **Capacity or quota pressure:** throttle callers, reduce rollout percentage where supported, or redirect to an approved alternate deployment.
-- **Downstream MCP/tool outage:** disable noncritical tools, revert to a prior tool contract or gateway revision, or route to a fallback version that degrades gracefully.
+When collecting these signals, implement **redaction rules** up front. Do not log secrets, bearer tokens, connection strings, or raw regulated data unless explicitly approved. Prefer hashed identifiers, field-level masking, truncated arguments, and allowlisted logging for safe fields only.
 
 AI Platform resource usage tracking, audit logging with Azure Monitor & Log Analytics
 
@@ -413,152 +534,46 @@ A log retention strategy should align to security, cost, and regulatory requirem
 A compliant audit strategy requires tiered retention: short-term logs in Log Analytics for detection and investigation, with long-term, immutable storage for regulatory and audit purposes.
 
 <!-- Added based on ENGINEERING review -->
-In addition to platform logs, engineering organizations should maintain **release provenance** outside the portal. Foundry version history is useful, but it should not be the only record of what was approved or promoted. A minimum release record should include:
+For engineering teams, we recommend standardizing a minimum **dashboard and alerting baseline** in development and test:
 
-- Git commit SHA and repository,
-- pipeline run or release ID,
-- environment target,
-- agent name and immutable version,
-- prompt/config version,
-- model deployment alias and model version,
-- tool, toolbox, or MCP contract versions,
-- knowledge asset or dataset versions where applicable,
-- evaluation run IDs or report URLs,
-- approvers,
-- approved rollback target.
+**Dashboards**
+1. **Release health dashboard** – requests, success rate, latency percentiles, token usage, version comparisons.
+2. **Quality and safety dashboard** – evaluation results, red-team findings, pass/fail status, delta vs previous release.
+3. **Dependency and tool dashboard** – per-tool success rate, latency, timeouts, retries, auth failures, fallback rate.
+4. **Cost and quota dashboard** – token consumption by agent/version, estimated cost by project, throttle events, quota trends.
 
-<!-- Added based on ENGINEERING review -->
-A machine-readable release manifest stored with pipeline artifacts is a practical way to satisfy this requirement. This becomes especially important when diagnosing who changed an agent, what version was promoted, and which rollback target is approved.
+**Baseline alerts**
+- run success rate below **95%**
+- sustained P95 latency above **10 seconds**
+- error rate above defined threshold
+- 429 / throttling spikes above baseline
+- token-per-request growth above budget
+- evaluation score drops below release threshold
+- critical red-team finding
+- loss of expected telemetry after deployment
 
-<!-- Added based on ENGINEERING review -->
-**GitOps boundary and portal auditability**
-
-Not every Foundry artifact is managed purely through ARM. For engineering teams, the recommended GitOps boundary is therefore broader than “everything deployable by Bicep.” The guiding principle should be:
-
-> All production-intended Foundry artifacts must have a Git-backed definition, manifest, or script, even when the actual creation step uses SDK, REST, CLI, or post-provision automation rather than ARM.
-
-Recommended treatment by artifact type:
-
-- **Prompt agents:** source-control prompts, instructions, model references, tool attachments, and version intent; use portal editing for experimentation only, then reconcile changes into Git before promotion. See [Agent development lifecycle](https://learn.microsoft.com/azure/foundry/agents/concepts/development-lifecycle).
-- **Foundry IQ knowledge assets / knowledge bases / knowledge sources:** manage as data-plane artifacts through source-controlled manifests and idempotent post-provision scripts.  
-- **Toolboxes:** source-control toolbox composition, included tools, auth modes, and external contract references; recreate through automation for higher environments.
-- **Evaluations:** source-control datasets, evaluator configurations, thresholds, and release gate definitions; treat portal views as evidence consumption, not the source of truth.
-- **Connections:** define desired state in Git and create with Bicep where supported, otherwise code-based automation; keep secrets out of source control and use Key Vault or managed identity. See [Add a new connection to your project](https://learn.microsoft.com/azure/foundry/how-to/connections-add).
+These values should be tuned by use case, but they provide a strong starting point aligned with Foundry monitoring guidance. See [Monitor agents with the Agent Monitoring Dashboard](https://learn.microsoft.com/azure/foundry/observability/how-to/how-to-monitor-agents-dashboard).
 
 <!-- Added based on ENGINEERING review -->
-Portal use remains valuable for rapid experimentation, playground validation, and some administrative scenarios, but production-affecting changes should be reconciled back into source control and automated workflows. When portal changes are unavoidable, capture at least:
+Teams should also maintain a lightweight **incident-response runbook** for dev/test/UAT environments. At minimum, it should answer:
 
-1. who changed the object,
-2. what object changed,
-3. before/after state,
-4. why automation was not used,
-5. validation or evaluation evidence,
-6. approver,
-7. rollback target,
-8. follow-up task to reconcile the change into Git-managed automation.
+1. **Detect** – which alert, evaluation, or smoke test failed?
+2. **Triage** – which environment, agent version, prompt version, model mapping, tool contract version, and KB/index version are involved?
+3. **Stabilize** – can traffic be routed back, a prior model alias restored, a tool disabled, or a prior knowledge/index version reactivated?
+4. **Investigate** – which traces, conversation IDs, dependency spans, and recent releases explain the regression?
+5. **Correct** – what change will be made through PR and CI/CD?
+6. **Review** – what test, threshold, or documentation update prevents recurrence?
 
 <!-- Added based on ENGINEERING review -->
-**CI/CD, developer workflow, and local testing**
+Finally, define an explicit **authoritative deployment surface and drift policy** for your platform:
 
-Foundry adoption is much smoother when customers establish a standard engineering workflow up front.
+- Treat **ARM/Bicep/Terraform** as authoritative for Foundry accounts, projects, model deployments, connections, networking, RBAC, diagnostics, and dependent Azure resources.
+- Treat **SDK/REST/CLI/`azd` automation** as authoritative for prompt agents, Hosted agent versions, traffic routing, tool registration, toolbox configuration, evaluations, and Foundry IQ knowledge objects.
+- Treat the **portal as a developer experience**, not the long-term source of truth, for any artifact that changes runtime behavior or governance.
+- Allow portal-first authoring in exploration environments, but require promoted artifacts to be recreated or reconciled in source control before they move forward.
+- In shared test, UAT, and production-like environments, disallow manual changes except for break-glass incidents and reconcile emergency edits back to Git immediately.
+- Run regular drift detection:
+  - IaC `what-if` / Terraform plan for management-plane resources
+  - API-level comparison for agents, versions, routing, evaluations, tool registrations, and Foundry IQ objects
 
-A practical CI/CD pattern is to version and promote these artifact groups independently, while validating them together in a governed pipeline:
-
-- **Agent definitions** – prompts/instructions, model bindings, tool declarations, runtime settings,
-- **Environment configuration** – Foundry projects, model deployments, connections, RBAC, diagnostics, networking, APIM,
-- **Evaluation assets** – golden datasets, evaluator configs, threshold profiles, release approval metadata,
-- **Tool / MCP contracts** – OpenAPI specifications, MCP schemas, function signatures, auth scopes.
-
-<!-- Added based on ENGINEERING review -->
-Recommended release behavior:
-- Treat every meaningful agent change as a **new immutable version**.
-- Promote the **same artifact version** across dev, test, and production, changing only environment-specific parameters.
-- Use **fast rollback to a prior approved immutable version** rather than editing in place.
-- Maintain a **release manifest** tying together the agent version, prompt version, model alias, tool contract versions, evaluation baseline, and rollback target.
-
-<!-- Added based on ENGINEERING review -->
-For repeatable platform engineering, use a **three-layer deployment model**:
-
-1. **Platform baseline IaC** – subscriptions, VNets, subnets, private DNS, private endpoints, Key Vault, Log Analytics, Application Insights, APIM, policy assignments, and diagnostic destinations.
-2. **Foundry environment IaC** – Foundry account and projects, standard agent setup resources, model deployments, supported connections, RBAC, and diagnostic settings.
-3. **Post-provision application deployment** – create or update agent versions, toolboxes, knowledge assets, datasets, evaluations, and other data-plane artifacts via SDK/REST/CLI automation.
-
-Infrastructure-as-code can be implemented with Bicep or Terraform, while application and agent workflows can be orchestrated with Azure Developer CLI where appropriate. See [Deploy an agent to Microsoft Foundry with the Azure Developer CLI AI agent extension](https://learn.microsoft.com/azure/developer/azure-developer-cli/extensions/azure-ai-foundry-extension) and the [Foundry samples repository](https://github.com/microsoft-foundry/foundry-samples).
-
-<!-- Added based on ENGINEERING review -->
-To prevent portal-only drift:
-- restrict direct write access in higher environments,
-- use Azure Policy to deny or audit disallowed configurations,
-- deploy diagnostic settings, monitoring, RBAC, and networking via IaC,
-- run periodic drift detection where practical,
-- ensure any portal-created production artifact is reconciled back into source control.
-
-<!-- Added based on ENGINEERING review -->
-**Developer workflow, local testing, and sandbox strategy**
-
-There is not yet a full offline emulator for every Foundry capability. In practice, teams should use **three testing tiers**:
-
-- **Tier 1 – Local-only:** prompt rendering tests, schema validation, mocked tool tests, deterministic regression tests with stubs.
-- **Tier 2 – Local code + isolated Azure resources:** the recommended default for most engineering work beyond trivial logic.
-- **Tier 3 – Shared dev/test/UAT:** multi-user integration, environment validation, policy validation, and release qualification.
-
-<!-- Added based on ENGINEERING review -->
-For **hosted agents**, Microsoft documents a local developer loop using Azure Developer CLI, including `azd ai agent run` and local invocation patterns. See [Foundry Hosted Agents – Running locally](https://learn.microsoft.com/agent-framework/hosting/foundry-hosted-agent#running-locally). This is the strongest local workflow currently available.
-
-<!-- Added based on ENGINEERING review -->
-For **prompt agents**, there is no equivalent full offline local runtime documented in the same way. The practical pattern is to use **personal or team sandbox Foundry projects** for iterative experimentation, save meaningful changes as versions, and promote only after evaluation and review.
-
-<!-- Added based on ENGINEERING review -->
-For **Foundry IQ, knowledge assets, and toolboxes**, treat them as **data-plane resources** created through post-provision automation and validated against isolated Azure-backed test resources rather than relying on manual portal creation.
-
-<!-- Added based on ENGINEERING review -->
-For **MCP and tool integrations**, split testing into:
-- unit tests with mocks and stubs,
-- contract tests against schemas or OpenAPI/MCP definitions,
-- integration tests against isolated real endpoints,
-- agent-level regression evaluations to confirm correct tool selection, invocation, and result usage.
-
-<!-- Added based on ENGINEERING review -->
-Evaluation workflows should be source-controlled and repeatable. Local smoke checks are useful, but **cloud-backed evaluations** should be the authoritative gate for promotion. See [Run agent evaluations with the azd CLI (preview)](https://learn.microsoft.com/azure/foundry/observability/how-to/azure-developer-cli-evaluation) and the [Azure-Samples/foundry-hosted-agentframework-demos](https://github.com/Azure-Samples/foundry-hosted-agentframework-demos) sample repository.
-
-<!-- Added based on ENGINEERING review -->
-**Operating model for dev/test/UAT and production readiness**
-
-Even though this article focuses on development adoption, engineering teams benefit from defining an operating model early. Recommended operational areas include:
-
-- **Incident handling** for regressions, outages, and compliance events,
-- **Quota and capacity monitoring** for model and agent workloads,
-- **Model retirement management** with successor planning,
-- **Tool and MCP dependency health** with fallback policies,
-- **Auditability and release evidence** across Git, pipelines, Foundry version history, and Azure monitoring.
-
-<!-- Added based on ENGINEERING review -->
-A simple severity model can help:
-- **Sev 1:** business-critical outage, major safety issue, or retired model breaking a critical workflow,
-- **Sev 2:** quota exhaustion, degraded tool dependency, or sustained latency/error increases,
-- **Sev 3:** nonproduction failures, blocked releases, or isolated contract/configuration issues.
-
-<!-- Added based on ENGINEERING review -->
-Operational runbooks should explicitly cover:
-- prompt regressions,
-- failed tool dependencies,
-- quota or capacity exhaustion,
-- model retirement or emergency retirement,
-- observability failures that eliminate required audit evidence.
-
-<!-- Added based on ENGINEERING review -->
-For tool dependencies, classify integrations as **required**, **optional**, or **advisory**, then define timeout, retry, fallback, and emergency disablement behavior for each. This is especially important for user-facing agents that depend on MCP servers or line-of-business APIs.
-
-<!-- Added based on ENGINEERING review -->
-For model retirement, maintain an inventory mapping:
-- agent → deployment alias → model/version → region,
-subscribe the appropriate teams to Azure Service Health and model retirement notifications, and prevalidate successor models with evaluations before retirement deadlines. See [Microsoft Foundry Models lifecycle and support policy](https://learn.microsoft.com/azure/foundry/openai/concepts/model-retirements).
-
-<!-- Added based on ENGINEERING review -->
-Finally, release approval should not rely solely on Foundry portal state. A production promotion should include:
-- engineering or platform approval,
-- service owner or product owner approval,
-- security or compliance approval where required,
-- evidence of evaluation success,
-- explicit rollback target confirmation.
-
+Relevant references include [Deploy an agent with `azd`](https://learn.microsoft.com/azure/developer/azure-developer-cli/extensions/azure-ai-foundry-extension), [Agent Service overview](https://learn.microsoft.com/azure/foundry/agents/overview), [Manage hosted agents](https://learn.microsoft.com/azure/foundry/agents/how-to/manage-hosted-agent), [Add a new connection to your project](https://learn.microsoft.com/azure/foundry/how-to/connections-add), [Function calling with Foundry agents](https://learn.microsoft.com/azure/foundry/agents/how-to/tools/function-calling), and [Cloud evaluations](https://learn.microsoft.com/azure/foundry/how-to/develop/cloud-evaluation).

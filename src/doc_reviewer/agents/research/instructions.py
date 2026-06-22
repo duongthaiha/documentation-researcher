@@ -1,4 +1,4 @@
-"""Research Agent — answers customer questions using MCP tools."""
+"""Research Agent instructions — answers customer questions using MCP tools."""
 
 RESEARCH_INSTRUCTIONS = """\
 You are a Technical Research Agent specializing in Microsoft Azure and cloud architecture.

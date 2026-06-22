@@ -1,4 +1,4 @@
-"""Writer Agent — updates documentation based on conversation findings."""
+"""Writer Agent instructions — updates documentation from conversation findings."""
 
 WRITER_INSTRUCTIONS = """\
 You are a Technical Writer Agent. Your job is to update architecture and guidance \

@@ -52,6 +52,10 @@ class Settings:
     review_rounds: int = 3
     ms_learn_mcp_url: str = "https://learn.microsoft.com/api/mcp"
     github_mcp_url: str = "https://api.githubcopilot.com/mcp/"
+    # Foundry connection IDs for authenticated MCP servers when agents are
+    # deployed as hosted prompt agents (Foundry forbids inline auth headers).
+    github_mcp_connection_id: str = ""
+    workiq_mcp_connection_id: str = ""
     langfuse_enabled: bool = False
     langfuse_public_key: str = ""
     langfuse_secret_key: str = ""
@@ -68,6 +72,8 @@ class Settings:
         )
         workiq_mcp_url = os.environ.get("WORKIQ_MCP_URL", "")
         github_mcp_token = _get_github_token()
+        github_mcp_connection_id = os.environ.get("GITHUB_MCP_CONNECTION_ID", "")
+        workiq_mcp_connection_id = os.environ.get("WORKIQ_MCP_CONNECTION_ID", "")
         review_rounds = int(os.environ.get("REVIEW_ROUNDS", "3"))
         research_dir = Path(
             os.environ.get(
@@ -105,6 +111,8 @@ class Settings:
             model_deployment_name=model_deployment_name,
             workiq_mcp_url=workiq_mcp_url,
             github_mcp_token=github_mcp_token,
+            github_mcp_connection_id=github_mcp_connection_id,
+            workiq_mcp_connection_id=workiq_mcp_connection_id,
             research_dir=research_dir,
             review_rounds=review_rounds,
             langfuse_enabled=langfuse_enabled,

@@ -1,4 +1,4 @@
-"""FSI (Financial Services Industry) Customer Agent."""
+"""FSI (Financial Services Industry) Customer Agent instructions."""
 
 FSI_INSTRUCTIONS = """\
 You are an IT Architect / CTO at a major financial services institution. You are reviewing \

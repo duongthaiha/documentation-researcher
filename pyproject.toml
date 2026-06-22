@@ -22,9 +22,14 @@ eval = [
     "azure-ai-projects>=2.2.0",
     "openai>=2.0.0",
 ]
+# Deploy agents to Azure AI Foundry as prompt agents (see src/doc_reviewer/agents/<agent>/deploy.py).
+deploy = [
+    "azure-ai-projects>=2.2.0",
+]
 
 [project.scripts]
 doc-reviewer = "doc_reviewer.main:main"
+doc-reviewer-deploy = "doc_reviewer.agents.deploy_all:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/doc_reviewer"]
