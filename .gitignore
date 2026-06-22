@@ -1,2 +1,8 @@
 __pycache__/
 .env
+# azd hosted-agent deploy staging: track the hand-authored deploy files
+# (agent.yaml, main.py, requirements.txt) but ignore the vendored package copy
+# (regenerate with src/agent_host/vendor.sh) and azd build logs.
+src/agent_host/doc_reviewer/
+.azure/
+azd-ai-agents-*.log

@@ -5,16 +5,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
-from agent_framework import MCPStreamableHTTPTool
-from azure.identity.aio import DefaultAzureCredential
-from httpx import AsyncClient, Timeout
 from langfuse import propagate_attributes
 
-from doc_reviewer.agents.base import (
-    create_customer_agent,
-    create_research_agent,
-    create_writer_agent,
-)
 from doc_reviewer.config import Settings
 from doc_reviewer.research_corpus import (
     find_relevant_research,
@@ -65,6 +57,19 @@ async def run_review(
     Returns:
         Tuple of (conversation history, updated document content)
     """
+    # Imported lazily so the hosted orchestrator container (which only uses the
+    # ``run_review_hosted`` path) does not need the heavy ``agent-framework``
+    # dependency tree.
+    from agent_framework import MCPStreamableHTTPTool
+    from azure.identity.aio import DefaultAzureCredential
+    from httpx import AsyncClient, Timeout
+
+    from doc_reviewer.agents.base import (
+        create_customer_agent,
+        create_research_agent,
+        create_writer_agent,
+    )
+
     session = ReviewSession(
         document_content=document_content,
         industries=industries,
@@ -132,15 +137,18 @@ async def run_review_hosted(
     rounds: int,
     research_dir: Path,
 ) -> tuple[list[ConversationMessage], str]:
-    """Run a review using agents **hosted in Azure AI Foundry**.
+    """Run a review against the **prompt agents deployed in Azure AI Foundry**.
 
     Instead of constructing agents from code, this invokes the already-deployed
     prompt agents by name through the project's Responses API (see
-    :mod:`doc_reviewer.agents.hosted`). The instructions, model, and tools are
-    resolved server-side, so no local MCP tool wiring is required.
+    :mod:`doc_reviewer.agents.prompt_agent`). The instructions, model, and tools
+    are resolved server-side, so no local MCP tool wiring is required.
     """
     # Imported lazily so the default (local) path doesn't require azure-ai-projects.
-    from doc_reviewer.agents.hosted import build_hosted_agents, create_project_client
+    from doc_reviewer.agents.prompt_agent import (
+        build_prompt_agents,
+        create_project_client,
+    )
 
     session = ReviewSession(
         document_content=document_content,
@@ -167,7 +175,7 @@ async def run_review_hosted(
             },
         ),
     ):
-        research_agent, customer_agents, writer_agent = build_hosted_agents(
+        research_agent, customer_agents, writer_agent = build_prompt_agents(
             project_client, industries
         )
         return await _run_conversation(
@@ -184,8 +192,9 @@ async def _run_conversation(
     """Drive the two-phase review loop.
 
     Agent-source agnostic: works with both local Agent Framework agents and
-    :class:`~doc_reviewer.agents.hosted.HostedAgent` instances, since both expose
-    the same ``run(prompt, stream=True)`` / ``await run(prompt)`` interface.
+    :class:`~doc_reviewer.agents.prompt_agent.PromptAgentClient` instances, since
+    both expose the same ``run(prompt, stream=True)`` / ``await run(prompt)``
+    interface.
     """
     rounds = session.rounds
 

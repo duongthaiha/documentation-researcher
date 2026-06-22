@@ -19,6 +19,19 @@ CUSTOMER_AGENT_PACKAGES: dict[str, str] = {
     "engineering": "doc_reviewer.agents.engineering_customer",
 }
 
+# Deployed Foundry prompt-agent names. Centralized here (a dependency-free module)
+# so the hosted orchestrator can resolve them WITHOUT importing the agent packages
+# — whose ``__init__`` pulls in ``agent_framework``, which the slim hosted
+# container intentionally omits. Each package's ``definition.py`` imports its name
+# from here so there is a single source of truth.
+RESEARCH_FOUNDRY_AGENT_NAME: str = "research-agent"
+WRITER_FOUNDRY_AGENT_NAME: str = "writer-agent"
+CUSTOMER_FOUNDRY_AGENT_NAMES: dict[str, str] = {
+    "fsi": "fsi-customer",
+    "manufacturing": "manufacturing-customer",
+    "engineering": "engineering-customer",
+}
+
 # All agent packages (customers + research + writer). Used by deploy_all.py.
 AGENT_PACKAGES: list[str] = [
     *CUSTOMER_AGENT_PACKAGES.values(),

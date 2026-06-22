@@ -25,7 +25,7 @@ from doc_reviewer.config import Settings
 if TYPE_CHECKING:
     from azure.ai.projects.models import MCPTool, PromptAgentDefinition
 
-FOUNDRY_AGENT_NAME = "research-agent"
+from doc_reviewer.agents.registry import RESEARCH_FOUNDRY_AGENT_NAME as FOUNDRY_AGENT_NAME
 DESCRIPTION = (
     "Technical research agent that answers reviewer questions using Microsoft "
     "Learn, WorkIQ and GitHub MCP tools, with citations."

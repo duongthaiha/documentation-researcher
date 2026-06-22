@@ -12,7 +12,8 @@ from doc_reviewer.config import Settings
 if TYPE_CHECKING:
     from azure.ai.projects.models import PromptAgentDefinition
 
-FOUNDRY_AGENT_NAME = "manufacturing-customer"
+from doc_reviewer.agents.registry import CUSTOMER_FOUNDRY_AGENT_NAMES
+FOUNDRY_AGENT_NAME = CUSTOMER_FOUNDRY_AGENT_NAMES["manufacturing"]
 DESCRIPTION = (
     "Manufacturing IT Architect/CTO persona that reviews architecture docs for "
     "edge computing, IoT, OT/IT convergence, low latency and intermittent connectivity."

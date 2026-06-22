@@ -26,10 +26,17 @@ eval = [
 deploy = [
     "azure-ai-projects>=2.2.0",
 ]
+# Host the orchestrator as a Foundry Hosted Agent (Responses protocol).
+# NOTE: Hosted agents require Python 3.13+ (see src/doc_reviewer/host/).
+host = [
+    "azure-ai-projects>=2.2.0",
+    "azure-ai-agentserver-responses>=1.0.0b7",
+]
 
 [project.scripts]
 doc-reviewer = "doc_reviewer.main:main"
 doc-reviewer-deploy = "doc_reviewer.agents.deploy_all:main"
+doc-reviewer-host = "doc_reviewer.host.server:run"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/doc_reviewer"]

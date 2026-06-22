@@ -12,7 +12,8 @@ from doc_reviewer.config import Settings
 if TYPE_CHECKING:
     from azure.ai.projects.models import PromptAgentDefinition
 
-FOUNDRY_AGENT_NAME = "engineering-customer"
+from doc_reviewer.agents.registry import CUSTOMER_FOUNDRY_AGENT_NAMES
+FOUNDRY_AGENT_NAME = CUSTOMER_FOUNDRY_AGENT_NAMES["engineering"]
 DESCRIPTION = (
     "Engineering lead/platform architect persona that reviews architecture docs "
     "for DevOps, CI/CD, agent versioning, eval gates, rollback and observability."

@@ -10,7 +10,7 @@ from doc_reviewer.config import Settings
 if TYPE_CHECKING:
     from azure.ai.projects.models import PromptAgentDefinition
 
-FOUNDRY_AGENT_NAME = "writer-agent"
+from doc_reviewer.agents.registry import WRITER_FOUNDRY_AGENT_NAME as FOUNDRY_AGENT_NAME
 DESCRIPTION = (
     "Technical writer agent that produces an updated document incorporating the "
     "guidance discovered during the review, preserving the original structure."

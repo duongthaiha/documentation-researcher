@@ -133,6 +133,7 @@ Each agent is a **self-contained package** so it can run locally via the Microso
     │   ├── engineering_customer/    # Engineering/DevOps customer persona
     │   ├── research/        # Research agent (with MCP tool definitions)
     │   └── writer/          # Document writer agent
+    ├── host/                # Foundry Hosted Agent for the orchestrator (Responses protocol)
     └── document/
         └── loader.py        # Markdown/PDF loader
 ```
@@ -173,6 +174,33 @@ doc-reviewer --file docs/architecture.md --hosted
 ```
 
 In `--hosted` mode, `main.py` calls `run_review_hosted`, which invokes each deployed agent **by name** through the project's Responses API (`get_openai_client(agent_name=...).responses.create(...)`); the model, instructions, and tools are resolved server-side. The same two-phase conversation loop drives both local and hosted execution.
+
+## Hosting the orchestrator (Foundry Hosted Agent)
+
+The sub-agents above deploy as **prompt agents**, but the **orchestrator** (the
+two-phase round loop) is custom Python. To run the whole review as a single
+managed Azure endpoint, host the orchestrator as a Foundry **Hosted Agent**
+(Pro-code) using the **Responses** protocol. It wraps `run_review_hosted` and
+calls the sub-agent prompt agents by name.
+
+```bash
+pip install ".[host]"   # requires Python 3.13+ (Hosted agents requirement)
+```
+
+Then deploy with `azd` from `src/doc_reviewer/host/`:
+
+```bash
+azd ext install microsoft.foundry
+azd ai agent init --protocol responses --deploy-mode code
+azd provision
+azd deploy
+azd ai agent invoke '{"document": "# My doc\n...", "industries": ["fsi"], "rounds": 2}'
+```
+
+The endpoint accepts a JSON body `{"document", "industries"?, "rounds"?}` (or
+plain document text) and returns the reviewed document. See
+[`src/doc_reviewer/host/README.md`](src/doc_reviewer/host/README.md) for the full
+runbook, container (`Dockerfile`) deploy path, and required roles.
 
 ## License
 

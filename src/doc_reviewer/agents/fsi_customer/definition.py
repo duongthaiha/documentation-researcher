@@ -11,7 +11,8 @@ if TYPE_CHECKING:
     from azure.ai.projects.models import PromptAgentDefinition
 
 # Stable name used when creating/versioning the agent in Foundry.
-FOUNDRY_AGENT_NAME = "fsi-customer"
+from doc_reviewer.agents.registry import CUSTOMER_FOUNDRY_AGENT_NAMES
+FOUNDRY_AGENT_NAME = CUSTOMER_FOUNDRY_AGENT_NAMES["fsi"]
 DESCRIPTION = (
     "Financial-services IT Architect/CTO persona that reviews architecture docs "
     "for security, regulatory compliance, network isolation and high availability."

@@ -1,0 +1,12 @@
+# Requirements for the doc-reviewer Hosted Agent (Responses protocol).
+#
+# The container installs the doc-reviewer project itself (see the Dockerfile,
+# which runs `pip install ".[host]"` from the repo root) so the `doc_reviewer`
+# package — including the orchestrator and sub-agent registry — is importable.
+#
+# This file pins the preview hosting library used by the Responses entrypoint.
+# Hosted agents require Python 3.13+.
+azure-ai-agentserver-responses>=1.0.0b7
+
+# Invoking the deployed sub-agent prompt agents by name needs the projects SDK.
+azure-ai-projects>=2.2.0
