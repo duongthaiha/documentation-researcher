@@ -72,7 +72,7 @@ class HostedAgent:
 
     async def _run_once(self, prompt: str) -> _Result:
         response = await asyncio.to_thread(
-            lambda: self._client.responses.create(input=prompt)
+            lambda: self._client.responses.create(input=prompt, store=True)
         )
         return _Result(text=response.output_text)
 
@@ -80,7 +80,9 @@ class HostedAgent:
         # The OpenAI SDK stream is synchronous; pull each event off in a worker
         # thread so the async orchestrator is never blocked.
         stream = await asyncio.to_thread(
-            lambda: self._client.responses.create(input=prompt, stream=True)
+            lambda: self._client.responses.create(
+                input=prompt, stream=True, store=True
+            )
         )
         iterator = iter(stream)
         sentinel = object()
