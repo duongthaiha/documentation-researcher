@@ -198,9 +198,17 @@ azd ai agent invoke '{"document": "# My doc\n...", "industries": ["fsi"], "round
 ```
 
 The endpoint accepts a JSON body `{"document", "industries"?, "rounds"?}` (or
-plain document text) and returns the reviewed document. See
-[`src/doc_reviewer/host/README.md`](src/doc_reviewer/host/README.md) for the full
-runbook, container (`Dockerfile`) deploy path, and required roles.
+plain document text) and returns the reviewed document. To call it from a local
+file, use the bundled client (it sends the file's **content**, not a path):
+
+```bash
+export DOC_REVIEWER_AGENT_ENDPOINT="https://<account>.services.ai.azure.com/api/projects/<project>"
+doc-reviewer-invoke --file docs/architecture.md --industry fsi --rounds 1
+```
+
+See [`src/doc_reviewer/host/README.md`](src/doc_reviewer/host/README.md) for the full
+runbook, all invocation options (script / azd / Python / curl), container
+(`Dockerfile`) deploy path, and required roles.
 
 ## License
 

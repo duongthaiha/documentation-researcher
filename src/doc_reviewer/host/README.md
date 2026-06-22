@@ -47,7 +47,31 @@ You also need access to invoke the agent: `az login`, and your identity (or the
 caller's) needs **Cognitive Services User** + **Azure AI Developer** (or
 equivalent Foundry data-plane roles) on the project hosting the agent.
 
-### Option A — `azd ai agent invoke` (build the payload from a local file)
+> A hosted agent is invoked through its **own agent endpoint**
+> (`.../agents/<name>/endpoint/protocols/openai/responses`), *not* the
+> project-level Responses endpoint with an `agent_reference` (that pattern is for
+> *prompt* agents). The helper script and examples below use the agent endpoint.
+
+### Option A — `doc-reviewer-invoke` script (easiest)
+
+A small client CLI (`doc_reviewer/host/client.py`) reads a local file, sends its
+content to the deployed agent, streams the result, and saves it:
+
+```bash
+pip install ".[host]"   # azure-ai-projects + openai
+
+export DOC_REVIEWER_AGENT_ENDPOINT="https://<account>.services.ai.azure.com/api/projects/<project>"
+doc-reviewer-invoke --file docs/architecture.md --industry fsi --rounds 1
+# -> writes docs/architecture_reviewed.md
+```
+
+Flags: `--file` (required), `--industry` (repeatable), `--rounds`, `--output`,
+`--agent-name` (default `doc-reviewer-orchestrator`), `--project-endpoint`
+(or `$DOC_REVIEWER_AGENT_ENDPOINT`), `--no-stream`. The endpoint is the project
+that **hosts the orchestrator** (printed by `azd deploy`) — which may differ from
+`AZURE_AI_PROJECT_ENDPOINT` (the project hosting the sub-agent prompt agents).
+
+### Option B — `azd ai agent invoke` (build the payload from a local file)
 
 Use `jq --rawfile` to safely embed the file's content as a JSON string:
 
@@ -65,17 +89,16 @@ For defaults (all industries, `REVIEW_ROUNDS` rounds) you can send the raw text:
 azd ai agent invoke doc-reviewer-orchestrator "$(cat ./docs/architecture.md)"
 ```
 
-### Option B — Python (OpenAI-compatible Responses API)
+### Option C — Python (OpenAI SDK against the agent endpoint)
 
-Mirrors how the orchestrator itself calls agents by name. Reads a local file,
-sends its content, writes the reviewed result back to a local file:
+Reads a local file, sends its content, writes the reviewed result back:
 
 ```python
 import json
 from pathlib import Path
 
-from azure.ai.projects import AIProjectClient
 from azure.identity import DefaultAzureCredential
+from openai import OpenAI
 
 # Project that hosts the orchestrator agent (the deploy output prints this).
 PROJECT_ENDPOINT = "https://<account>.services.ai.azure.com/api/projects/<project>"
@@ -86,26 +109,24 @@ payload = json.dumps(
     {"document": src.read_text(encoding="utf-8"), "industries": ["fsi"], "rounds": 1}
 )
 
-client = AIProjectClient(
-    endpoint=PROJECT_ENDPOINT,
-    credential=DefaultAzureCredential(),
-    allow_preview=True,
-).get_openai_client()
-
-resp = client.responses.create(
-    input=payload,
-    extra_body={"agent_reference": {"type": "agent_reference", "name": AGENT_NAME}},
+token = DefaultAzureCredential().get_token("https://ai.azure.com/.default").token
+client = OpenAI(
+    base_url=f"{PROJECT_ENDPOINT}/agents/{AGENT_NAME}/endpoint/protocols/openai",
+    api_key=token,
+    default_query={"api-version": "v1"},
 )
+
+resp = client.responses.create(input=payload)   # no agent_reference for hosted agents
 
 out = src.with_name(f"{src.stem}_reviewed{src.suffix}")
 out.write_text(resp.output_text, encoding="utf-8")
 print(f"Wrote {out}")
 ```
 
-To stream progress, add `stream=True` and iterate, collecting
-`event.delta` from `response.output_text.delta` events.
+To stream progress, add `stream=True` and collect `event.delta` from
+`response.output_text.delta` events.
 
-### Option C — curl (raw HTTPS)
+### Option D — curl (raw HTTPS)
 
 ```bash
 ENDPOINT="https://<account>.services.ai.azure.com/api/projects/<project>/agents/doc-reviewer-orchestrator/endpoint/protocols/openai/responses?api-version=v1"

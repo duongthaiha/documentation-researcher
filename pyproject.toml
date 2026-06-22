@@ -37,6 +37,7 @@ host = [
 doc-reviewer = "doc_reviewer.main:main"
 doc-reviewer-deploy = "doc_reviewer.agents.deploy_all:main"
 doc-reviewer-host = "doc_reviewer.host.server:run"
+doc-reviewer-invoke = "doc_reviewer.host.client:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/doc_reviewer"]
