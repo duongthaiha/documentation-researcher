@@ -6,13 +6,23 @@ sub-agents (FSI / Manufacturing / Engineering customer, Research, Writer) remain
 **prompt agents** and are invoked **by name** — this package just wraps
 `run_review_hosted` in a managed Azure endpoint.
 
-```
-Client ──(Responses API)──▶ Hosted Agent: doc-reviewer-orchestrator
-                                  │  parse {document, industries, rounds}
-                                  ▼
-                            run_review_hosted(...)  ──by name──▶ prompt agents
-                                  ▼
-                          reviewed document (TextResponse)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Host as Hosted Agent<br/>(doc-reviewer-orchestrator)
+    participant Prompt as Prompt agents<br/>(customers / research / writer)
+
+    Client->>Host: document content + {industries, rounds}<br/>(Responses API)
+    Note over Host: parse request →<br/>run_review_hosted(...)
+    loop N rounds
+        Host->>Prompt: customer asks (by name)
+        Prompt-->>Host: questions
+        Host->>Prompt: research answers (by name)
+        Prompt-->>Host: answer + citations
+    end
+    Host->>Prompt: writer updates doc (by name)
+    Prompt-->>Host: reviewed document
+    Host-->>Client: reviewed document (TextResponse)
 ```
 
 ## Files

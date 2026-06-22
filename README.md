@@ -4,8 +4,13 @@ A multi-agent system that reviews architecture and guidance documentation from i
 
 ## How It Works
 
-```
-Document → Customer Agents ask questions → Research Agent answers → Writer Agent updates doc
+```mermaid
+flowchart LR
+    Doc[/"Input document"/] --> C["Customer agents<br/>(ask questions)"]
+    C --> R["Research agent<br/>(answers + citations)"]
+    R -->|repeat for N rounds| C
+    R --> W["Writer agent<br/>(updates the doc)"]
+    W --> Out[/"Reviewed document"/]
 ```
 
 **Phase 1 — Customer Q&A:** Industry-specific customer agents (acting as IT Architects/CTOs) read your document and ask pointed questions about gaps and missing best practices. A Research Agent answers using local Markdown research docs plus Microsoft Learn and WorkIQ MCP tools.
@@ -182,6 +187,21 @@ two-phase round loop) is custom Python. To run the whole review as a single
 managed Azure endpoint, host the orchestrator as a Foundry **Hosted Agent**
 (Pro-code) using the **Responses** protocol. It wraps `run_review_hosted` and
 calls the sub-agent prompt agents by name.
+
+```mermaid
+flowchart TB
+    Client["Client<br/>(doc-reviewer-invoke / azd / curl)"]
+    subgraph FoundryHost["Foundry project — hosted agent"]
+        HA["Hosted Agent: doc-reviewer-orchestrator<br/>(custom Python: two-phase loop)"]
+    end
+    subgraph FoundrySub["Foundry project — prompt agents"]
+        PA["fsi / manufacturing / engineering customer<br/>research-agent · writer-agent"]
+    end
+    Client -->|"document content<br/>(Responses API)"| HA
+    HA -->|"invoke by name<br/>(Responses API)"| PA
+    PA -->|"answers + reviewed doc"| HA
+    HA -->|"reviewed document"| Client
+```
 
 ```bash
 pip install ".[host]"   # requires Python 3.13+ (Hosted agents requirement)
