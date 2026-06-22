@@ -201,3 +201,45 @@ doc-reviewer-host              # starts the Responses server locally
   copies the repo). Set `RESEARCH_DIR` if you relocate it.
 - Hosted agents are in **preview**; pin the `azure-ai-agentserver-*` beta and use
   a [supported region](https://learn.microsoft.com/azure/foundry/agents/concepts/hosted-agents#region-availability).
+
+## Cross-project / cross-region topology
+
+The Hosted Agent and the prompt agents can live in **different Foundry projects**
+(and different regions). This is the case for this deployment because Hosted
+Agents are region-gated: the orchestrator was provisioned in a supported region
+(East US 2) while the prompt agents stayed in their original project (UK South).
+The orchestrator reaches the other project via the `AZURE_AI_PROJECT_ENDPOINT`
+env var in `agent.yaml`, and its **dedicated agent identity** is granted
+data-plane roles on that project so the by-name calls are authorized.
+
+```mermaid
+flowchart TB
+    Client["Client<br/>doc-reviewer-invoke / azd / curl"]
+
+    subgraph P1["Foundry project A — region: East US 2 (Hosted-Agent-eligible)"]
+        direction TB
+        HA["Hosted Agent<br/><b>doc-reviewer-orchestrator</b><br/>(custom Python: two-phase loop)"]
+        AID["Agent identity<br/>…-AgentIdentity (Entra)"]
+        HA -.uses.-> AID
+    end
+
+    subgraph P2["Foundry project B — region: UK South"]
+        direction TB
+        PC["Prompt agents<br/>fsi / manufacturing / engineering customer"]
+        PR["Prompt agent<br/>research-agent (MS Learn MCP)"]
+        PW["Prompt agent<br/>writer-agent"]
+    end
+
+    Client -->|"1 — document content<br/>(agent endpoint, Responses API)"| HA
+    HA -->|"2 — invoke by name via<br/>AZURE_AI_PROJECT_ENDPOINT (agent.yaml)"| PC
+    HA --> PR
+    HA --> PW
+    AID -. "RBAC: Cognitive Services User +<br/>Azure AI Developer on project B" .-> P2
+    PW -->|"3 — reviewed document"| HA
+    HA -->|"4 — reviewed document"| Client
+```
+
+> To keep everything in **one** project instead, deploy the prompt agents into
+> the Hosted-Agent-eligible project (`doc-reviewer-deploy --publish` against that
+> project) and point `AZURE_AI_PROJECT_ENDPOINT` there; the cross-project RBAC
+> grant is then unnecessary.
