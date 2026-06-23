@@ -48,6 +48,12 @@ class Settings:
     model_deployment_name: str
     workiq_mcp_url: str
     github_mcp_token: str = ""
+    # Per-role model deployments. Empty -> fall back to model_deployment_name.
+    # Lets agents spread across deployments so they don't all share one model's
+    # rate limit (use the per-role accessors below).
+    customer_model_deployment_name: str = ""
+    research_model_deployment_name: str = ""
+    writer_model_deployment_name: str = ""
     research_dir: Path = field(default_factory=_default_research_dir)
     review_rounds: int = 3
     ms_learn_mcp_url: str = "https://learn.microsoft.com/api/mcp"
@@ -63,12 +69,36 @@ class Settings:
     langfuse_enable_sensitive_data: bool = False
     langfuse_debug: bool = False
 
+    @property
+    def customer_model(self) -> str:
+        """Model deployment for customer agents (falls back to the default)."""
+        return self.customer_model_deployment_name or self.model_deployment_name
+
+    @property
+    def research_model(self) -> str:
+        """Model deployment for the research agent (falls back to the default)."""
+        return self.research_model_deployment_name or self.model_deployment_name
+
+    @property
+    def writer_model(self) -> str:
+        """Model deployment for the writer agent (falls back to the default)."""
+        return self.writer_model_deployment_name or self.model_deployment_name
+
     @classmethod
     def from_env(cls) -> "Settings":
         """Load settings from environment variables."""
         project_endpoint = os.environ.get("AZURE_AI_PROJECT_ENDPOINT", "")
         model_deployment_name = os.environ.get(
             "AZURE_AI_MODEL_DEPLOYMENT_NAME", "gpt-4o"
+        )
+        customer_model_deployment_name = os.environ.get(
+            "CUSTOMER_MODEL_DEPLOYMENT_NAME", ""
+        )
+        research_model_deployment_name = os.environ.get(
+            "RESEARCH_MODEL_DEPLOYMENT_NAME", ""
+        )
+        writer_model_deployment_name = os.environ.get(
+            "WRITER_MODEL_DEPLOYMENT_NAME", ""
         )
         workiq_mcp_url = os.environ.get("WORKIQ_MCP_URL", "")
         github_mcp_token = _get_github_token()
@@ -109,6 +139,9 @@ class Settings:
         return cls(
             project_endpoint=project_endpoint,
             model_deployment_name=model_deployment_name,
+            customer_model_deployment_name=customer_model_deployment_name,
+            research_model_deployment_name=research_model_deployment_name,
+            writer_model_deployment_name=writer_model_deployment_name,
             workiq_mcp_url=workiq_mcp_url,
             github_mcp_token=github_mcp_token,
             github_mcp_connection_id=github_mcp_connection_id,

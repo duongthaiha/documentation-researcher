@@ -28,6 +28,6 @@ def build_prompt_agent_definition(settings: Settings) -> "PromptAgentDefinition"
     from azure.ai.projects.models import PromptAgentDefinition
 
     return PromptAgentDefinition(
-        model=settings.model_deployment_name,
+        model=settings.customer_model,
         instructions=FSI_INSTRUCTIONS,
     )

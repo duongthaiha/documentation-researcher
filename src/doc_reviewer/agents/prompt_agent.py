@@ -45,8 +45,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger("doc_reviewer")
 
 # Retry transient model rate-limit (429) errors with exponential backoff.
-_MAX_RETRIES = 4
-_BASE_DELAY_SECONDS = 2.0
+# Generous because the model deployment may be shared and transiently saturated.
+_MAX_RETRIES = 6
+_BASE_DELAY_SECONDS = 3.0
+_MAX_DELAY_SECONDS = 45.0
 
 
 def _is_rate_limit_error(exc: Exception) -> bool:
@@ -67,8 +69,11 @@ def _retry_after_seconds(exc: Exception, attempt: int) -> float:
                 return float(retry_after)
             except (TypeError, ValueError):
                 pass
-    # Exponential backoff with jitter.
-    return _BASE_DELAY_SECONDS * (2 ** attempt) + random.uniform(0, 1)
+    # Exponential backoff with jitter, capped.
+    return min(
+        _BASE_DELAY_SECONDS * (2 ** attempt) + random.uniform(0, 1),
+        _MAX_DELAY_SECONDS,
+    )
 
 
 def _create_with_retry(create_fn, *, agent_name: str):

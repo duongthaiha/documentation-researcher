@@ -29,6 +29,10 @@ from doc_reviewer.agents.registry import CUSTOMER_INDUSTRIES
 from doc_reviewer.config import Settings
 from doc_reviewer.orchestrator import run_review_hosted
 
+# Defensive upper bound so an accidentally large `rounds` can't fan out into a
+# huge number of agent calls / tokens (calls ≈ 2 * rounds * industries + 1).
+_MAX_ROUNDS = 5
+
 
 @dataclass
 class ReviewRequest:
@@ -109,7 +113,11 @@ def parse_review_request(raw: str, settings: Settings) -> ReviewRequest:
         if requested:
             if isinstance(requested, str):
                 requested = [requested]
-            valid = [i for i in requested if i in CUSTOMER_INDUSTRIES]
+            # De-duplicate while preserving order so a repeated industry can't
+            # double the number of agent calls.
+            valid = list(
+                dict.fromkeys(i for i in requested if i in CUSTOMER_INDUSTRIES)
+            )
             industries = valid or list(CUSTOMER_INDUSTRIES)
 
         if payload.get("rounds") is not None:
@@ -121,7 +129,7 @@ def parse_review_request(raw: str, settings: Settings) -> ReviewRequest:
     return ReviewRequest(
         document=document,
         industries=industries,
-        rounds=max(1, rounds),
+        rounds=max(1, min(rounds, _MAX_ROUNDS)),
         explicit=explicit,
     )
 

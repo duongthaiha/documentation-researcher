@@ -117,7 +117,7 @@ def build_prompt_agent_definition(settings: Settings) -> "PromptAgentDefinition"
     from azure.ai.projects.models import PromptAgentDefinition
 
     return PromptAgentDefinition(
-        model=settings.model_deployment_name,
+        model=settings.research_model,
         instructions=RESEARCH_INSTRUCTIONS,
         tools=build_mcp_tools(settings),
     )

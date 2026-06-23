@@ -27,6 +27,32 @@ flowchart LR
 | Research Agent | Answers customer questions with researched best practices. | Local Markdown research docs, Microsoft Learn MCP, WorkIQ MCP |
 | Writer Agent | Updates the document with new guidance from the review. | None (LLM) |
 
+## Token usage & model selection
+
+Each review makes `2 × rounds × industries + 1` agent calls, so token usage is
+kept in check by design:
+
+- The **document is sent only on each industry's first round** (and once to the
+  writer) — not re-pasted every round — and the **research agent isn't sent the
+  document at all** (it answers specific questions with its own tools).
+- The transcript echoed into each turn is **capped** to recent messages, and
+  `rounds` is clamped to a safe maximum.
+- The **research agent** is instructed to make at most ~2 tool calls and answer
+  concisely, so its MCP tool loop doesn't run away.
+- Model rate-limit (429) errors are retried with exponential backoff.
+
+Agents can run on **different model deployments** so they don't all share one
+model's rate limit (each falls back to `AZURE_AI_MODEL_DEPLOYMENT_NAME`):
+
+| Env var | Used by | Example |
+|---------|---------|---------|
+| `CUSTOMER_MODEL_DEPLOYMENT_NAME` | Customer agents (high volume, simple) | `gpt-4.1-mini` |
+| `RESEARCH_MODEL_DEPLOYMENT_NAME` | Research agent (isolated; tool loops) | `gpt-4.1` |
+| `WRITER_MODEL_DEPLOYMENT_NAME` | Writer agent (best quality, 1 call) | `gpt-5.4` |
+
+Set these before deploying the prompt agents (`doc-reviewer-deploy --publish`);
+the model is baked into each agent version.
+
 ## Setup
 
 ### Prerequisites

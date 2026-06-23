@@ -33,16 +33,36 @@ class ReviewSession:
     conversation: list[ConversationMessage] = field(default_factory=list)
 
 
-def _format_conversation_history(conversation: list[ConversationMessage]) -> str:
-    """Format conversation history for injection into agent prompts."""
+def _format_conversation_history(
+    conversation: list[ConversationMessage], *, max_messages: int | None = None
+) -> str:
+    """Format conversation history for injection into agent prompts.
+
+    ``max_messages`` caps how many of the most recent messages are included so
+    the transcript echoed into every per-turn prompt doesn't grow without bound
+    across rounds (which would make token usage grow quadratically).
+    """
     if not conversation:
         return ""
 
+    messages = conversation
+    truncated = False
+    if max_messages is not None and len(conversation) > max_messages:
+        messages = conversation[-max_messages:]
+        truncated = True
+
     lines = ["## Conversation So Far\n"]
-    for msg in conversation:
+    if truncated:
+        lines.append(f"_(showing the {max_messages} most recent messages)_\n")
+    for msg in messages:
         lines.append(f"**{msg.agent_name}**: {msg.content}\n")
 
     return "\n".join(lines)
+
+
+# Cap the transcript echoed into each customer/research prompt. The full
+# transcript is still given to the writer for the final rewrite.
+_MAX_HISTORY_MESSAGES = 6
 
 
 async def run_review(
@@ -260,9 +280,16 @@ async def _run_conversation(
 
 def _build_customer_prompt(session: ReviewSession, round_num: int) -> str:
     """Build the prompt for a customer agent's turn."""
-    history = _format_conversation_history(session.conversation)
+    history = _format_conversation_history(
+        session.conversation, max_messages=_MAX_HISTORY_MESSAGES
+    )
 
-    if round_num == 1 and not session.conversation:
+    # Round 1 is each industry customer's first turn, so it gets the full
+    # document to review. Later rounds rely on the recent transcript instead of
+    # re-pasting the whole document (which would re-bill thousands of tokens
+    # every round) — the customer reacts to the research answers to ask
+    # follow-ups.
+    if round_num == 1:
         return (
             f"Please review the following architecture/guidance document and ask "
             f"2-3 specific questions about gaps or missing best practices from your "
@@ -271,19 +298,26 @@ def _build_customer_prompt(session: ReviewSession, round_num: int) -> str:
         )
     else:
         return (
-            f"Continue reviewing the document. Based on the research answers provided, "
-            f"ask 1-2 follow-up questions about remaining gaps or areas that need "
-            f"more clarification.\n\n"
-            f"## Original Document\n\n{session.document_content}\n\n"
+            f"Continue reviewing the document you saw earlier. Based on the "
+            f"research answers below, ask 1-2 follow-up questions about remaining "
+            f"gaps or areas that need more clarification.\n\n"
             f"{history}"
         )
 
 
 def _build_research_prompt(session: ReviewSession) -> str:
-    """Build the prompt for the research agent's turn."""
+    """Build the prompt for the research agent's turn.
+
+    The research agent answers a specific question using its own tools and the
+    local research context, so the full document is **not** re-pasted here (it is
+    already echoed in the customer's question and the recent transcript) — this
+    avoids re-sending thousands of document tokens on every research call.
+    """
     # Get the last customer question
     last_question = session.conversation[-1]
-    history = _format_conversation_history(session.conversation[:-1])
+    history = _format_conversation_history(
+        session.conversation[:-1], max_messages=_MAX_HISTORY_MESSAGES
+    )
     local_research_context = format_research_context(
         find_relevant_research(session.research_dir, last_question.content)
     )
@@ -295,10 +329,9 @@ def _build_research_prompt(session: ReviewSession) -> str:
 
     return (
         f"A customer ({last_question.agent_name}) has asked the following questions "
-        f"about this architecture document. Research the answers using the local "
-        f"research context when provided and your tools, then provide specific, "
+        f"about an architecture document under review. Research the answers using the "
+        f"local research context when provided and your tools, then provide specific, "
         f"actionable guidance.\n\n"
-        f"## Original Document\n\n{session.document_content}\n\n"
         f"{history}\n\n"
         f"{local_research_section}"
         f"## Latest Question from {last_question.agent_name}\n\n"
