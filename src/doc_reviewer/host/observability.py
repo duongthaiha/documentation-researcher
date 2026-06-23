@@ -57,12 +57,32 @@ def configure_foundry_telemetry() -> bool:
         "OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT", "true"
     )
 
-    configure_azure_monitor(
-        connection_string=connection_string,
-        logger_name="doc_reviewer",
-    )
+    # Attribute our custom spans to the agent (cloud role) instead of
+    # "unknown_service" so Foundry Control Plane groups them under the hosted
+    # agent. The platform injects FOUNDRY_AGENT_NAME at runtime.
+    agent_name = os.environ.get("FOUNDRY_AGENT_NAME", "doc-reviewer-orchestrator")
+    resource = None
+    try:
+        from opentelemetry.sdk.resources import Resource
+
+        resource = Resource.create({"service.name": agent_name})
+    except ImportError:
+        resource = None
+
+    configure_kwargs = {
+        "connection_string": connection_string,
+        "logger_name": "doc_reviewer",
+    }
+    if resource is not None:
+        configure_kwargs["resource"] = resource
+
+    configure_azure_monitor(**configure_kwargs)
     _configured = True
-    logger.info("Foundry telemetry configured: exporting OpenTelemetry to Application Insights.")
+    logger.info(
+        "Foundry telemetry configured (service.name=%s): exporting OpenTelemetry "
+        "to Application Insights.",
+        agent_name,
+    )
     return True
 
 

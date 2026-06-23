@@ -105,6 +105,33 @@ def _get_tracer():
     return trace.get_tracer("doc_reviewer.agents.prompt_agent")
 
 
+def _set_usage_attrs(span, usage) -> None:
+    """Record token usage on the span using GenAI semantic-convention attributes.
+
+    These let Foundry Control Plane aggregate token-usage / cost metrics. The
+    Responses API ``usage`` exposes ``input_tokens`` / ``output_tokens`` /
+    ``total_tokens``; tolerate the chat-style ``prompt_tokens`` names too.
+    """
+    if span is None or usage is None:
+        return
+    input_tokens = getattr(usage, "input_tokens", None)
+    if input_tokens is None:
+        input_tokens = getattr(usage, "prompt_tokens", None)
+    output_tokens = getattr(usage, "output_tokens", None)
+    if output_tokens is None:
+        output_tokens = getattr(usage, "completion_tokens", None)
+    total_tokens = getattr(usage, "total_tokens", None)
+    try:
+        if input_tokens is not None:
+            span.set_attribute("gen_ai.usage.input_tokens", int(input_tokens))
+        if output_tokens is not None:
+            span.set_attribute("gen_ai.usage.output_tokens", int(output_tokens))
+        if total_tokens is not None:
+            span.set_attribute("gen_ai.usage.total_tokens", int(total_tokens))
+    except (TypeError, ValueError):
+        pass
+
+
 @dataclass
 class _Chunk:
     """Minimal stand-in for an Agent Framework streaming chunk."""
@@ -158,11 +185,11 @@ class PromptAgentClient:
         with tracer.start_as_current_span(f"invoke_agent {self.foundry_agent_name}") as span:
             span.set_attribute("gen_ai.operation.name", "invoke_agent")
             span.set_attribute("gen_ai.agent.name", self.foundry_agent_name)
-            result = await self._invoke_once(prompt)
+            result = await self._invoke_once(prompt, span=span)
             span.set_attribute("gen_ai.response.output_chars", len(result.text))
             return result
 
-    async def _invoke_once(self, prompt: str) -> _Result:
+    async def _invoke_once(self, prompt: str, *, span=None) -> _Result:
         response = await asyncio.to_thread(
             _create_with_retry,
             lambda: self._client.responses.create(
@@ -172,6 +199,7 @@ class PromptAgentClient:
             ),
             agent_name=self.foundry_agent_name,
         )
+        _set_usage_attrs(span, getattr(response, "usage", None))
         return _Result(text=response.output_text)
 
     async def _run_stream(self, prompt: str) -> AsyncIterator[_Chunk]:
@@ -184,12 +212,12 @@ class PromptAgentClient:
             span.set_attribute("gen_ai.operation.name", "invoke_agent")
             span.set_attribute("gen_ai.agent.name", self.foundry_agent_name)
             total = 0
-            async for chunk in self._invoke_stream(prompt):
+            async for chunk in self._invoke_stream(prompt, span=span):
                 total += len(chunk.text)
                 yield chunk
             span.set_attribute("gen_ai.response.output_chars", total)
 
-    async def _invoke_stream(self, prompt: str) -> AsyncIterator[_Chunk]:
+    async def _invoke_stream(self, prompt: str, *, span=None) -> AsyncIterator[_Chunk]:
         # The OpenAI SDK stream is synchronous; pull each event off in a worker
         # thread so the async orchestrator is never blocked.
         stream = await asyncio.to_thread(
@@ -208,8 +236,13 @@ class PromptAgentClient:
             event = await asyncio.to_thread(next, iterator, sentinel)
             if event is sentinel:
                 break
-            if getattr(event, "type", None) == "response.output_text.delta":
+            event_type = getattr(event, "type", None)
+            if event_type == "response.output_text.delta":
                 yield _Chunk(text=event.delta)
+            elif event_type in ("response.completed", "response.incomplete"):
+                # The final event carries the token usage for the whole response.
+                usage = getattr(getattr(event, "response", None), "usage", None)
+                _set_usage_attrs(span, usage)
 
 
 def create_project_client(settings: Settings) -> "AIProjectClient":
