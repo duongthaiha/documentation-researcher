@@ -40,6 +40,15 @@ if TYPE_CHECKING:
     from azure.ai.projects import AIProjectClient
 
 
+def _get_tracer():
+    """Return an OpenTelemetry tracer if available, else ``None`` (no-op spans)."""
+    try:
+        from opentelemetry import trace
+    except ImportError:
+        return None
+    return trace.get_tracer("doc_reviewer.agents.prompt_agent")
+
+
 @dataclass
 class _Chunk:
     """Minimal stand-in for an Agent Framework streaming chunk."""
@@ -87,6 +96,17 @@ class PromptAgentClient:
         return self._run_once(prompt)
 
     async def _run_once(self, prompt: str) -> _Result:
+        tracer = _get_tracer()
+        if tracer is None:
+            return await self._invoke_once(prompt)
+        with tracer.start_as_current_span(f"invoke_agent {self.foundry_agent_name}") as span:
+            span.set_attribute("gen_ai.operation.name", "invoke_agent")
+            span.set_attribute("gen_ai.agent.name", self.foundry_agent_name)
+            result = await self._invoke_once(prompt)
+            span.set_attribute("gen_ai.response.output_chars", len(result.text))
+            return result
+
+    async def _invoke_once(self, prompt: str) -> _Result:
         response = await asyncio.to_thread(
             lambda: self._client.responses.create(
                 input=prompt,
@@ -97,6 +117,21 @@ class PromptAgentClient:
         return _Result(text=response.output_text)
 
     async def _run_stream(self, prompt: str) -> AsyncIterator[_Chunk]:
+        tracer = _get_tracer()
+        if tracer is None:
+            async for chunk in self._invoke_stream(prompt):
+                yield chunk
+            return
+        with tracer.start_as_current_span(f"invoke_agent {self.foundry_agent_name}") as span:
+            span.set_attribute("gen_ai.operation.name", "invoke_agent")
+            span.set_attribute("gen_ai.agent.name", self.foundry_agent_name)
+            total = 0
+            async for chunk in self._invoke_stream(prompt):
+                total += len(chunk.text)
+                yield chunk
+            span.set_attribute("gen_ai.response.output_chars", total)
+
+    async def _invoke_stream(self, prompt: str) -> AsyncIterator[_Chunk]:
         # The OpenAI SDK stream is synchronous; pull each event off in a worker
         # thread so the async orchestrator is never blocked.
         stream = await asyncio.to_thread(

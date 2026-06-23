@@ -106,6 +106,15 @@ def create_app():
         TextResponse,
     )
 
+    from doc_reviewer.host.observability import (
+        configure_foundry_telemetry,
+        flush_telemetry,
+        get_tracer,
+    )
+
+    configure_foundry_telemetry()
+    tracer = get_tracer()
+
     app = ResponsesAgentServerHost()
 
     @app.response_handler
@@ -130,13 +139,26 @@ def create_app():
             )
 
         try:
-            updated_document = await run_review_request(req, settings)
+            if tracer is not None:
+                with tracer.start_as_current_span("doc_review") as span:
+                    span.set_attribute("doc_review.industries", ",".join(req.industries))
+                    span.set_attribute("doc_review.rounds", req.rounds)
+                    span.set_attribute("doc_review.document_chars", len(req.document))
+                    updated_document = await run_review_request(req, settings)
+                    span.set_attribute(
+                        "doc_review.output_chars", len(updated_document)
+                    )
+            else:
+                updated_document = await run_review_request(req, settings)
         except Exception as exc:  # noqa: BLE001 - return a concise error to the caller
             return TextResponse(
                 context,
                 request,
                 text=f"Review failed: {type(exc).__name__}: {exc}",
             )
+        finally:
+            # Push buffered telemetry before the sandbox scales to zero.
+            flush_telemetry()
         return TextResponse(context, request, text=updated_document)
 
     return app

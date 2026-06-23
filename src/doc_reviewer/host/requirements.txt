@@ -10,3 +10,6 @@ azure-ai-agentserver-responses>=1.0.0b7
 
 # Invoking the deployed sub-agent prompt agents by name needs the projects SDK.
 azure-ai-projects>=2.2.0
+
+# OpenTelemetry export to Application Insights so traces show in Foundry Control Plane.
+azure-monitor-opentelemetry>=1.6.0

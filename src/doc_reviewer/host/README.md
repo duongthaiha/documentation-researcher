@@ -195,6 +195,40 @@ pip install ".[host]"          # needs Python 3.13
 doc-reviewer-host              # starts the Responses server locally
 ```
 
+## Observability (Foundry Control Plane traces)
+
+Traces and logs surface in **Foundry Control Plane** (Operate → Assets → select
+the agent → **Traces**) from the **Application Insights** resource connected to
+the agent's project. `azd provision` creates that App Insights and connects it,
+and the platform injects `APPLICATIONINSIGHTS_CONNECTION_STRING` into the
+container.
+
+Because this is a **custom-code** agent, it wires OpenTelemetry → Azure Monitor
+itself (`host/observability.py`, via `azure-monitor-opentelemetry`) so the
+detailed spans show up:
+
+- `doc_review` — one span per review request (attributes: industries, rounds,
+  document/output sizes).
+- `invoke_agent <name>` — one span per sub-agent call (GenAI conventions:
+  `gen_ai.operation.name`, `gen_ai.agent.name`), plus the underlying
+  `POST .../responses` dependency to each prompt agent.
+
+`flush_telemetry()` force-flushes after each request so buffered spans are
+exported before the sandbox scales to zero. To disable capturing prompt/response
+content in spans (reviewed docs may be sensitive), set
+`OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=false`.
+
+Query the traces directly with the Azure CLI (use `-o json`; `-o table` can drop
+rows):
+
+```bash
+az monitor app-insights query --app <appinsights-name> -g <rg> \
+  --analytics-query "union requests,dependencies | where timestamp > ago(1h) and name startswith 'doc_review' or name startswith 'invoke_agent' | project timestamp, name, duration" \
+  -o json
+```
+
+Or stream container stdout/stderr with `azd ai agent monitor doc-reviewer-orchestrator`.
+
 ## Notes
 
 - The local `research/` corpus is bundled into the image by the Dockerfile (it
