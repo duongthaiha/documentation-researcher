@@ -9,8 +9,8 @@ Usage::
     # install the client deps (azure-ai-projects, openai) once
     pip install ".[host]"
 
-    export DOC_REVIEWER_AGENT_ENDPOINT="https://<account>.services.ai.azure.com/api/projects/<project>"
-    doc-reviewer-invoke --file docs/architecture.md --industry fsi --rounds 1
+    export DOC_REVIEWER_AGENT_ENDPOINT="https://ai-account-unf63h5g4tg6u.services.ai.azure.com/api/projects/ai-project-doc-reviewer-orchestrator-dev"
+    doc-reviewer-invoke --file "document/Microsoft Foundry adoption across my organization.md" --industry fsi --rounds 1
 
 The endpoint is the project that **hosts the orchestrator agent** (printed by
 ``azd deploy``), which may differ from ``AZURE_AI_PROJECT_ENDPOINT`` (the project
