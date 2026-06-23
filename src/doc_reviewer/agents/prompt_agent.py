@@ -26,6 +26,9 @@ Foundry project where the prompt agents have already been deployed (see
 from __future__ import annotations
 
 import asyncio
+import logging
+import random
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, AsyncIterator
 
@@ -38,6 +41,54 @@ from doc_reviewer.config import Settings
 
 if TYPE_CHECKING:
     from azure.ai.projects import AIProjectClient
+
+logger = logging.getLogger("doc_reviewer")
+
+# Retry transient model rate-limit (429) errors with exponential backoff.
+_MAX_RETRIES = 4
+_BASE_DELAY_SECONDS = 2.0
+
+
+def _is_rate_limit_error(exc: Exception) -> bool:
+    """Return True for model throttling / 429 errors worth retrying."""
+    if getattr(exc, "status_code", None) == 429:
+        return True
+    return "rate limit" in str(exc).lower()
+
+
+def _retry_after_seconds(exc: Exception, attempt: int) -> float:
+    """Backoff delay, honoring a Retry-After header when present."""
+    response = getattr(exc, "response", None)
+    headers = getattr(response, "headers", None)
+    if headers:
+        retry_after = headers.get("retry-after") or headers.get("Retry-After")
+        if retry_after:
+            try:
+                return float(retry_after)
+            except (TypeError, ValueError):
+                pass
+    # Exponential backoff with jitter.
+    return _BASE_DELAY_SECONDS * (2 ** attempt) + random.uniform(0, 1)
+
+
+def _create_with_retry(create_fn, *, agent_name: str):
+    """Call a blocking ``responses.create`` thunk, retrying on rate limits."""
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            return create_fn()
+        except Exception as exc:  # noqa: BLE001 - re-raised below if not retryable
+            if not _is_rate_limit_error(exc) or attempt == _MAX_RETRIES:
+                raise
+            delay = _retry_after_seconds(exc, attempt)
+            logger.warning(
+                "Rate limited calling agent '%s' (attempt %d/%d); retrying in "
+                "%.1fs.",
+                agent_name,
+                attempt + 1,
+                _MAX_RETRIES,
+                delay,
+            )
+            time.sleep(delay)
 
 
 def _get_tracer():
@@ -108,11 +159,13 @@ class PromptAgentClient:
 
     async def _invoke_once(self, prompt: str) -> _Result:
         response = await asyncio.to_thread(
+            _create_with_retry,
             lambda: self._client.responses.create(
                 input=prompt,
                 store=True,
                 extra_body={"agent_reference": self._agent_reference},
-            )
+            ),
+            agent_name=self.foundry_agent_name,
         )
         return _Result(text=response.output_text)
 
@@ -135,12 +188,14 @@ class PromptAgentClient:
         # The OpenAI SDK stream is synchronous; pull each event off in a worker
         # thread so the async orchestrator is never blocked.
         stream = await asyncio.to_thread(
+            _create_with_retry,
             lambda: self._client.responses.create(
                 input=prompt,
                 stream=True,
                 store=True,
                 extra_body={"agent_reference": self._agent_reference},
-            )
+            ),
+            agent_name=self.foundry_agent_name,
         )
         iterator = iter(stream)
         sentinel = object()

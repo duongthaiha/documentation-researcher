@@ -45,6 +45,12 @@ Send the Responses input as either JSON or plain text:
 - `industries` / `rounds` are optional (default: all industries, `REVIEW_ROUNDS`).
 - Plain text is treated as the document with defaults.
 - Response body is the reviewed document.
+- **Greetings / short chatter** (e.g. `hi`, `hello`, `help`) get a friendly usage
+  message instead of triggering an expensive review. An explicit JSON `document`
+  is always reviewed, however short.
+- **Model rate limits (429)** are retried with exponential backoff per sub-agent
+  call; if the quota is still exhausted, the response explains how to fix it
+  (wait, lower `rounds`/`industries`, or raise the deployment's TPM quota).
 
 ## Invoking when deployed on Azure (send content, not a file path)
 

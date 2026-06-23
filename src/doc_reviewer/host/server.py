@@ -37,6 +37,49 @@ class ReviewRequest:
     document: str
     industries: list[str]
     rounds: int
+    # True when the document came from an explicit JSON ``document``/``input``
+    # field (clear review intent); False when it's bare text we're guessing at.
+    explicit: bool = False
+
+
+HELP_TEXT = (
+    "👋 Hi! I'm the **documentation reviewer** orchestrator. Send me an "
+    "architecture or guidance document and I'll have industry customer agents "
+    "(FSI / Manufacturing / Engineering) review it, a research agent answer "
+    "their questions, and a writer agent return an improved version.\n\n"
+    "Send either:\n"
+    "• the document text directly, or\n"
+    '• a JSON payload: {"document": "# My architecture...", '
+    '"industries": ["fsi"], "rounds": 1}\n\n'
+    "`industries` and `rounds` are optional. A real review calls several agents "
+    "and takes about a minute per round per industry."
+)
+
+_GREETINGS = {
+    "hi", "hello", "hey", "yo", "hiya", "hi there", "hello there", "howdy",
+    "test", "testing", "ping", "help", "?", "hi!", "hello!", "start",
+    "what can you do", "what can you do?", "who are you", "who are you?",
+}
+
+
+def is_trivial_input(raw: str, *, explicit: bool) -> bool:
+    """Return True for greetings/short chatter that shouldn't trigger a review.
+
+    Only applies to bare text (``explicit=False``); an explicit JSON ``document``
+    is always treated as a real review, however short.
+    """
+    if explicit:
+        return False
+    text = (raw or "").strip()
+    if not text:
+        return True
+    lowered = text.lower().strip("!.?")
+    if lowered in _GREETINGS:
+        return True
+    # Too short and single-line to be a document worth a multi-agent review.
+    if len(text) < 40 and "\n" not in text:
+        return True
+    return False
 
 
 def parse_review_request(raw: str, settings: Settings) -> ReviewRequest:
@@ -50,6 +93,7 @@ def parse_review_request(raw: str, settings: Settings) -> ReviewRequest:
     industries = list(CUSTOMER_INDUSTRIES)
     rounds = settings.review_rounds
     document = raw or ""
+    explicit = False
 
     payload = None
     try:
@@ -59,6 +103,7 @@ def parse_review_request(raw: str, settings: Settings) -> ReviewRequest:
 
     if isinstance(payload, dict):
         document = payload.get("document") or payload.get("input") or ""
+        explicit = bool(document)
 
         requested = payload.get("industries")
         if requested:
@@ -74,7 +119,10 @@ def parse_review_request(raw: str, settings: Settings) -> ReviewRequest:
                 pass
 
     return ReviewRequest(
-        document=document, industries=industries, rounds=max(1, rounds)
+        document=document,
+        industries=industries,
+        rounds=max(1, rounds),
+        explicit=explicit,
     )
 
 
@@ -127,16 +175,10 @@ def create_app():
         settings = Settings.from_env()
         req = parse_review_request(raw, settings)
 
-        if not req.document.strip():
-            return TextResponse(
-                context,
-                request,
-                text=(
-                    "Error: no document provided. Send the document text, or a "
-                    'JSON payload like {"document": "...", "industries": '
-                    '["fsi"], "rounds": 3}.'
-                ),
-            )
+        # Greetings / short chatter shouldn't trigger an expensive multi-agent
+        # review (which would also burn model quota). Answer with usage help.
+        if is_trivial_input(raw, explicit=req.explicit) or not req.document.strip():
+            return TextResponse(context, request, text=HELP_TEXT)
 
         try:
             if tracer is not None:
@@ -152,9 +194,7 @@ def create_app():
                 updated_document = await run_review_request(req, settings)
         except Exception as exc:  # noqa: BLE001 - return a concise error to the caller
             return TextResponse(
-                context,
-                request,
-                text=f"Review failed: {type(exc).__name__}: {exc}",
+                context, request, text=_friendly_error(exc)
             )
         finally:
             # Push buffered telemetry before the sandbox scales to zero.
@@ -162,6 +202,20 @@ def create_app():
         return TextResponse(context, request, text=updated_document)
 
     return app
+
+
+def _friendly_error(exc: Exception) -> str:
+    """Turn an exception into a concise, actionable message for the caller."""
+    text = str(exc)
+    if "rate limit" in text.lower() or getattr(exc, "status_code", None) == 429:
+        return (
+            "⏳ The review hit the model's rate limit (quota) and couldn't "
+            "finish. The underlying model deployment is throttled — wait a "
+            "moment and try again, reduce `rounds`/`industries`, or raise the "
+            "deployment's tokens-per-minute quota in Azure AI Foundry.\n\n"
+            f"Details: {type(exc).__name__}: {text}"
+        )
+    return f"Review failed: {type(exc).__name__}: {text}"
 
 
 def run() -> None:
