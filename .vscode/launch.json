@@ -19,7 +19,7 @@
       },
       "args": [
         "--file",
-        "document/Microsoft Foundry adoption across my organization.md",
+        "document/AgentOps/agentops.md",
         "--industry",
         "engineering",
         "--rounds",

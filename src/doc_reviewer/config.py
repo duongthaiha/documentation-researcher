@@ -10,6 +10,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+_VALID_LOG_LEVELS = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+
+
 def _get_bool_env(name: str, default: bool = False) -> bool:
     value = os.environ.get(name)
     if value is None:
@@ -68,6 +71,8 @@ class Settings:
     langfuse_base_url: str = "http://localhost:3000"
     langfuse_enable_sensitive_data: bool = False
     langfuse_debug: bool = False
+    # Console logging verbosity for the app and noisy libraries (e.g. Langfuse).
+    log_level: str = "INFO"
 
     @property
     def customer_model(self) -> str:
@@ -119,6 +124,9 @@ class Settings:
             "LANGFUSE_ENABLE_SENSITIVE_DATA", False
         )
         langfuse_debug = _get_bool_env("LANGFUSE_DEBUG", False)
+        log_level = os.environ.get("LOG_LEVEL", "INFO").strip().upper()
+        if log_level not in _VALID_LOG_LEVELS:
+            log_level = "INFO"
 
         if not project_endpoint:
             raise ValueError(
@@ -154,4 +162,5 @@ class Settings:
             langfuse_base_url=langfuse_base_url,
             langfuse_enable_sensitive_data=langfuse_enable_sensitive_data,
             langfuse_debug=langfuse_debug,
+            log_level=log_level,
         )

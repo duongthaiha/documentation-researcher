@@ -8,7 +8,11 @@ from pathlib import Path
 from doc_reviewer.agents.registry import CUSTOMER_INDUSTRIES
 from doc_reviewer.config import Settings
 from doc_reviewer.document.loader import load_document
-from doc_reviewer.observability import configure_observability, flush_observability
+from doc_reviewer.observability import (
+    configure_logging,
+    configure_observability,
+    flush_observability,
+)
 from doc_reviewer.orchestrator import run_review, run_review_hosted
 
 SUPPORTED_INDUSTRIES = list(CUSTOMER_INDUSTRIES)
@@ -50,6 +54,13 @@ def parse_args() -> argparse.Namespace:
         "by name, instead of building them locally. Requires the 'deploy' extra "
         "and previously deployed agents (see doc_reviewer.agents.deploy_all).",
     )
+    parser.add_argument(
+        "--log-level",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"],
+        default=None,
+        help="Console logging verbosity. Overrides the LOG_LEVEL env var. "
+        "Use WARNING or higher to hide Langfuse/HTTP info logs (default: INFO).",
+    )
     return parser.parse_args()
 
 
@@ -69,6 +80,11 @@ async def async_main() -> None:
     except ValueError as e:
         print(f"❌ Configuration error: {e}", file=sys.stderr)
         sys.exit(1)
+
+    # Configure logging first so library logs (e.g. Langfuse) respect the level.
+    if args.log_level:
+        settings.log_level = args.log_level
+    configure_logging(settings.log_level)
 
     try:
         configure_observability(settings)

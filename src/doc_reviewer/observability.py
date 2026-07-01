@@ -1,8 +1,38 @@
 """Optional Langfuse observability setup."""
 
+import logging
 import os
 
 from doc_reviewer.config import Settings
+
+# Third-party loggers that can flood the console (Langfuse and its HTTP/OTel
+# dependencies). Their level is capped to the configured log level.
+_NOISY_LOGGERS = (
+    "langfuse",
+    "httpx",
+    "httpcore",
+    "openai",
+    "opentelemetry",
+    "azure",
+    "azure.core.pipeline.policies.http_logging_policy",
+)
+
+
+def configure_logging(level: str) -> None:
+    """Configure console logging verbosity for the app and noisy libraries.
+
+    Set ``level`` to ``WARNING`` (or higher) to hide informational Langfuse and
+    HTTP client logs from the console.
+    """
+    numeric_level = getattr(logging, level.upper(), logging.INFO)
+    logging.basicConfig(
+        level=numeric_level,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        force=True,
+    )
+    logging.getLogger().setLevel(numeric_level)
+    for name in _NOISY_LOGGERS:
+        logging.getLogger(name).setLevel(numeric_level)
 
 
 def configure_observability(settings: Settings) -> None:
