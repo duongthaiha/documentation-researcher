@@ -1,8 +1,8 @@
 ---
 title: AgentOps - Operationalize Microsoft Foundry Agents
 description: Learn how to apply DevOps discipline to Microsoft Foundry agents. AgentOps covers CI/CD, environment promotion, evaluation gates, and observability for prompt agents, hosted agents, tools, Foundry IQ, and memory.
-author: your-alias
-ms.author: your-alias
+author: Ha Duong
+ms.author: Ha DUong
 ms.date: 2026-07-01
 ms.topic: concept-article
 ms.service: azure-architecture-center
